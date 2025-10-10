@@ -1,0 +1,28 @@
+{
+  "name": "sqlluck",
+  "version": "1.0.0",
+  "description": "跨平台 MySQL 客户端（基于 Electron）",
+  "author": {
+    "name": "json7",
+    "email": "json7@foxmail.com"
+  },
+  "main": "electron/main.js",
+  "scripts": {
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\" \"wait-on http://localhost:3000 && npm run dev:electron\"",
+    "dev:backend": "cd backend && npm run dev",
+    "dev:frontend": "cd frontend && npm run dev",
+    "dev:electron": "cd electron && npm run dev",
+    "build": "npm run build:backend && npm run build:frontend && npm run build:electron",
+    "build:backend": "cd backend && npm run build",
+    "build:frontend": "cd frontend && npm run build",
+    "build:electron": "cd electron && npm run build",
+    "start": "cd electron && npm start"
+  },
+  "homepage": "https://github.com/json7/sqlluck",
+  "keywords": ["mysql", "database", "client", "electron", "vue"],
+  "license": "MIT",
+  "devDependencies": {
+    "concurrently": "^8.2.2",
+    "wait-on": "^7.2.0"
+  }
+}

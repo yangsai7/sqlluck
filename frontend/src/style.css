@@ -1,0 +1,170 @@
+/* 全局样式 */
+:root {
+  --primary-color: #409eff;
+  --success-color: #67c23a;
+  --warning-color: #e6a23c;
+  --danger-color: #f56c6c;
+  --info-color: #909399;
+
+  --bg-color: #ffffff;
+  --bg-secondary: #f5f7fa;
+  --border-color: #dcdfe6;
+  --text-color: #303133;
+  --text-secondary: #606266;
+  --text-placeholder: #c0c4cc;
+}
+
+/* 滚动条样式 */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
+}
+
+/* 工具提示 */
+.tooltip {
+  font-size: 12px;
+  color: var(--text-placeholder);
+  line-height: 1.4;
+}
+
+/* 状态徽章 */
+.status-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+}
+
+.status-badge.success {
+  background: #f0f9ff;
+  color: var(--success-color);
+  border: 1px solid #b3e19d;
+}
+
+.status-badge.error {
+  background: #fef0f0;
+  color: var(--danger-color);
+  border: 1px solid #f8b4b4;
+}
+
+.status-badge.warning {
+  background: #fdf6ec;
+  color: var(--warning-color);
+  border: 1px solid #f5dab1;
+}
+
+/* 代码样式 */
+.code {
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', monospace;
+  font-size: 13px;
+  background: #f5f7fa;
+  padding: 2px 4px;
+  border-radius: 3px;
+}
+
+/* 工具栏样式 */
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.toolbar-divider {
+  width: 1px;
+  height: 20px;
+  background: var(--border-color);
+  margin: 0 8px;
+}
+
+/* 表格增强样式 */
+.el-table .cell {
+  padding-left: 8px !important;
+  padding-right: 8px !important;
+}
+
+.el-table__header th {
+  background: #fafbfc !important;
+  color: var(--text-secondary) !important;
+  font-weight: 500 !important;
+  font-size: 13px !important;
+}
+
+/* 按钮组 */
+.btn-group {
+  display: inline-flex;
+  vertical-align: middle;
+}
+
+.btn-group .el-button:not(:first-child) {
+  margin-left: -1px;
+}
+
+.btn-group .el-button:not(:last-child) {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.btn-group .el-button:not(:first-child) {
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+
+/* 加载动画 */
+.loading-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+/* 空状态 */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+  color: var(--text-placeholder);
+}
+
+.empty-state .el-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+}
+
+/* 响应式 */
+@media (max-width: 768px) {
+  .sidebar {
+    width: 280px !important;
+  }
+
+  .toolbar {
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+}

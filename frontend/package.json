@@ -1,0 +1,30 @@
+{
+  "name": "mysql-client-frontend",
+  "version": "1.0.0",
+  "description": "sqlluck前端界面",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@ant-design/icons-vue": "^7.0.1",
+    "@codemirror/lang-sql": "^6.5.0",
+    "@codemirror/theme-one-dark": "^6.1.2",
+    "ant-design-vue": "^4.2.6",
+    "axios": "^1.4.0",
+    "codemirror": "^6.0.1",
+    "monaco-editor": "^0.41.0",
+    "monaco-editor-webpack-plugin": "^7.1.0",
+    "pinia": "^2.1.4",
+    "splitpanes": "^3.1.5",
+    "vue": "^3.3.4",
+    "vue-router": "^4.2.4"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^4.2.3",
+    "@vitejs/plugin-vue-jsx": "^3.1.0",
+    "sass": "^1.64.1",
+    "vite": "^4.4.5"
+  }
+}
