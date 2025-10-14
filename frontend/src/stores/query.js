@@ -14,13 +14,13 @@ export const useQueryStore = defineStore('query', {
 
   actions: {
     // 执行SQL查询
-    async executeQuery(connectionId, sql, params = []) {
+    async executeQuery(connectionId, database, sql, params = []) {
       this.isExecuting = true
       this.queryError = null
       this.queryResults = null
 
       try {
-        const result = await queryAPI.execute(connectionId, sql, params)
+        const result = await queryAPI.execute(connectionId, database, sql, params)
 
         if (result.success) {
           this.queryResults = {

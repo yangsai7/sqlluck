@@ -27,7 +27,7 @@ function createWindow() {
       webSecurity: !isDevelopment,
       devTools: true,
     },
-    icon: path.join(__dirname, '../assets/icon.png'),
+    icon: path.join(__dirname, '../assets/logo.png'),
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
     show: false, // 初始隐藏，加载完成后显示
     backgroundColor: '#f0f2f5'

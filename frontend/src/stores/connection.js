@@ -159,14 +159,14 @@ export const useConnectionStore = defineStore('connection', {
       }
     },
 
-    async setActiveDatabase(databaseName) {
+    async setActiveDatabase(databaseName, force = false) {
       if (!this.activeConnectionId) return;
       const dbKey = `${this.activeConnectionId}-${databaseName}`;
       this.connectionDetails[this.activeConnectionId].activeDatabaseName = databaseName;
       if (!databaseName) return;
 
       const currentDbObjects = this.connectionDetails[this.activeConnectionId].dbObjects[databaseName];
-      if (currentDbObjects) return; // Already loaded
+      if (currentDbObjects && !force) return; // Already loaded
 
       this.loading = true;
       try {

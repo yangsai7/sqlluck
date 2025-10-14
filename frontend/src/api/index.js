@@ -94,8 +94,8 @@ export const connectionAPI = {
 // 查询管理API
 export const queryAPI = {
   // 执行SQL查询
-  execute(connectionId, sql, params = []) {
-    return api.post(`/connections/${connectionId}/query`, { sql, params })
+  execute(connectionId, database, sql, params = []) {
+    return api.post(`/connections/${connectionId}/query`, { database, sql, params })
   },
 
   // 获取表结构

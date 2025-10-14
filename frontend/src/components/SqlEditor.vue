@@ -1,12 +1,12 @@
 <template>
-  <div class="sql-editor">
-    <div class="editor-toolbar">
+  <div class="sql-editor" ref="sqlEditorRoot">
+    <div class="editor-toolbar" ref="editorToolbar">
       <div class="toolbar-left">
         <a-button
           type="primary"
           size="small"
           :loading="queryStore.isExecuting"
-          :disabled="!currentSql.trim() || !connectionStore.isConnected"
+          :disabled="!currentSql.trim() || !connectionStore.isConnected || !connectionStore.activeDatabaseName"
           @click="executeQuery"
         >
           <template #icon><PlayCircleOutlined /></template>
@@ -37,43 +37,20 @@
       </div>
     </div>
 
-    <div class="editor-container" ref="editorContainer">
-      <div class="editor-wrapper-enhanced">
-        <div ref="highlightLayer" class="editor-highlight" v-html="highlightedSQL"></div>
-        <textarea
-          ref="editorRef"
-          v-model="currentSql"
-          class="editor-textarea-enhanced"
-          placeholder="请输入 SQL 查询语句..."
-          @keydown="handleKeydown"
-          @input="handleInput"
-          @scroll="syncScroll"
-        />
-        <div
-          v-if="showAutoComplete"
-          class="autocomplete-dropdown"
-          :style="{ left: autoCompletePosition.x + 'px', top: autoCompletePosition.y + 'px' }"
-        >
-          <div
-            v-for="(item, index) in autoCompleteItems"
-            :key="index"
-            class="autocomplete-item"
-            :class="{ active: index === selectedSuggestionIndex }"
-            @click="selectAutoCompleteItem(item)"
-            @mouseenter="selectedSuggestionIndex = index"
-          >
-            <span class="autocomplete-type" :class="item.type">{{ item.type }}</span>
-            <div class="autocomplete-content">
-              <div class="autocomplete-name">{{ item.display }}</div>
-              <div class="autocomplete-description">{{ item.description }}</div>
-            </div>
-          </div>
-        </div>
-      </div>
+    <div class="editor-container" :style="{ height: editorHeight + 'px' }">
+      <textarea
+        ref="editorRef"
+        v-model="currentSql"
+        class="editor-textarea-plain"
+        placeholder="请输入 SQL 查询语句..."
+        @keydown="handleKeydown"
+      />
     </div>
 
+    <div class="splitter-horizontal" @mousedown="startDrag"></div>
+
     <div v-if="queryStore.queryResults || queryStore.queryError" class="result-container">
-      <a-tabs v-model:activeKey="activeTab" type="card">
+      <a-tabs v-model:activeKey="activeTab" type="card" style="height: 100%">
         <a-tab-pane key="result" tab="查询结果">
           <QueryResult :data="queryStore.queryResults" :error="queryStore.queryError" />
         </a-tab-pane>
@@ -102,7 +79,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, watch, computed, nextTick } from 'vue'
+import { ref, onMounted, watch, computed } from 'vue'
 import { message } from 'ant-design-vue'
 import { PlayCircleOutlined, RedoOutlined, DeleteOutlined } from '@ant-design/icons-vue'
 import { useConnectionStore } from '@/stores/connection'
@@ -116,94 +93,43 @@ const connectionStore = useConnectionStore()
 const queryStore = useQueryStore()
 
 const editorRef = ref()
-const editorContainer = ref()
-const highlightLayer = ref()
+const sqlEditorRoot = ref()
+const editorToolbar = ref()
 const currentSql = ref('')
 const activeTab = ref('result')
-const showAutoComplete = ref(false)
-const autoCompletePosition = ref({ x: 0, y: 0 })
-const autoCompleteItems = ref([])
-const selectedSuggestionIndex = ref(0)
-
-let autoComplete = null
+const editorHeight = ref(250)
 
 const databaseOptions = computed(() => 
   connectionStore.databases.map(db => ({ label: db, value: db }))
 )
 
-const highlightedSQL = computed(() => sqlUtils.highlight(currentSql.value))
-
 watch(currentSql, (newSql) => {
   queryStore.setCurrentQuery(newSql)
-  updateHighlight()
 })
 
-const updateHighlight = async () => {
-  await nextTick()
-  if (highlightLayer.value) {
-    highlightLayer.value.innerHTML = highlightedSQL.value
+const startDrag = (e) => {
+  e.preventDefault()
+  document.addEventListener('mousemove', doDrag)
+  document.addEventListener('mouseup', stopDrag)
+}
+
+const doDrag = (e) => {
+  if (sqlEditorRoot.value && editorToolbar.value) {
+    const containerTop = sqlEditorRoot.value.getBoundingClientRect().top
+    const toolbarHeight = editorToolbar.value.offsetHeight
+    const newHeight = e.clientY - containerTop - toolbarHeight
+    const totalHeight = sqlEditorRoot.value.offsetHeight
+    
+    // Add constraints
+    if (newHeight > 50 && newHeight < totalHeight - 150) {
+      editorHeight.value = newHeight
+    }
   }
 }
 
-const showAutoCompleteDropdown = (event) => {
-  if (!autoComplete || !editorRef.value) return
-
-  const textarea = editorRef.value
-  const cursorPosition = textarea.selectionStart
-  const suggestions = autoComplete.getSuggestions(currentSql.value, cursorPosition)
-
-  if (suggestions.length > 0) {
-    autoCompleteItems.value = suggestions
-    selectedSuggestionIndex.value = 0
-
-    // Dynamically calculate position
-    const styles = window.getComputedStyle(textarea)
-    const lineHeight = parseFloat(styles.lineHeight)
-    const fontSize = parseFloat(styles.fontSize)
-    const paddingLeft = parseFloat(styles.paddingLeft)
-    const paddingTop = parseFloat(styles.paddingTop)
-
-    // Estimate character width (more accurate for monospace fonts)
-    const charWidth = fontSize * 0.6
-
-    const textBeforeCursor = currentSql.value.substring(0, cursorPosition)
-    const lines = textBeforeCursor.split('\n')
-    const currentLine = lines.length - 1
-    const currentColumn = lines[lines.length - 1].length
-
-    // Position relative to the textarea's top-left, considering scroll and padding
-    const x = paddingLeft - textarea.scrollLeft + (currentColumn * charWidth)
-    const y = paddingTop - textarea.scrollTop + (currentLine * lineHeight) + lineHeight
-
-    autoCompletePosition.value = { x, y }
-    showAutoComplete.value = true
-  } else {
-    hideAutoComplete()
-  }
-}
-
-const hideAutoComplete = () => {
-  showAutoComplete.value = false
-  autoCompleteItems.value = []
-  selectedSuggestionIndex.value = 0
-}
-
-const selectAutoCompleteItem = (item) => {
-  const textarea = editorRef.value
-  const cursorPosition = textarea.selectionStart
-  const textBefore = currentSql.value.substring(0, cursorPosition)
-  const textAfter = currentSql.value.substring(cursorPosition)
-  const words = textBefore.split(/\s+/)
-  const lastWord = words[words.length - 1] || ''
-  const wordStart = textBefore.lastIndexOf(lastWord)
-  const newText = textBefore.substring(0, wordStart) + item.value + textAfter
-  currentSql.value = newText
-  nextTick(() => {
-    const newCursorPos = wordStart + item.value.length
-    textarea.focus()
-    textarea.setSelectionRange(newCursorPos, newCursorPos)
-  })
-  hideAutoComplete()
+const stopDrag = () => {
+  document.removeEventListener('mousemove', doDrag)
+  document.removeEventListener('mouseup', stopDrag)
 }
 
 const executeQuery = async () => {
@@ -213,8 +139,11 @@ const executeQuery = async () => {
   if (!connectionStore.activeConnectionId) {
     message.warning('请先连接数据库'); return;
   }
+  if (!connectionStore.activeDatabaseName) {
+    message.warning('请先选择一个数据库'); return;
+  }
   try {
-    await queryStore.executeQuery(connectionStore.activeConnectionId, currentSql.value.trim())
+    await queryStore.executeQuery(connectionStore.activeConnectionId, connectionStore.activeDatabaseName, currentSql.value.trim())
     activeTab.value = 'result'
   } catch (error) {
     activeTab.value = 'result'
@@ -228,42 +157,6 @@ const loadHistoryQuery = (sql) => { currentSql.value = sql; activeTab.value = 'r
 const handleKeydown = (event) => {
   if (event.key === 'F9') { event.preventDefault(); executeQuery() }
   if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') { event.preventDefault(); executeQuery() }
-  if ((event.ctrlKey || event.metaKey) && event.key === 'a') { event.preventDefault(); editorRef.value.select() }
-  if ((event.ctrlKey || event.metaKey) && event.code === 'Space') { event.preventDefault(); showAutoCompleteDropdown(event) }
-  if (showAutoComplete.value) {
-    if (event.key === 'ArrowDown') {
-      event.preventDefault()
-      selectedSuggestionIndex.value = Math.min(selectedSuggestionIndex.value + 1, autoCompleteItems.value.length - 1)
-    } else if (event.key === 'ArrowUp') {
-      event.preventDefault()
-      selectedSuggestionIndex.value = Math.max(selectedSuggestionIndex.value - 1, 0)
-    } else if (event.key === 'Enter' || event.key === 'Tab') {
-      event.preventDefault()
-      if (autoCompleteItems.value[selectedSuggestionIndex.value]) {
-        selectAutoCompleteItem(autoCompleteItems.value[selectedSuggestionIndex.value])
-      }
-    } else if (event.key === 'Escape') {
-      event.preventDefault()
-      hideAutoComplete()
-    }
-  }
-}
-
-const handleInput = (event) => {
-  setTimeout(() => {
-    if (currentSql.value.trim()) {
-      showAutoCompleteDropdown(event)
-    } else {
-      hideAutoComplete()
-    }
-  }, 200)
-}
-
-const syncScroll = () => {
-  if (highlightLayer.value && editorRef.value) {
-    highlightLayer.value.scrollTop = editorRef.value.scrollTop
-    highlightLayer.value.scrollLeft = editorRef.value.scrollLeft
-  }
 }
 
 const insertSqlTemplate = (template) => {
@@ -280,28 +173,42 @@ const insertSqlTemplate = (template) => {
 
 onMounted(() => {
   queryStore.loadHistoryFromStorage()
-  autoComplete = sqlUtils.createAutoComplete(connectionStore)
-  setTimeout(() => { editorRef.value?.focus(); updateHighlight() }, 100)
-  document.addEventListener('click', (event) => {
-    if (!editorContainer.value?.contains(event.target)) {
-      hideAutoComplete()
-    }
-  })
+  setTimeout(() => { editorRef.value?.focus() }, 100)
 })
-
-onUnmounted(() => { document.removeEventListener('click', hideAutoComplete) })
 
 defineExpose({ insertSqlTemplate, executeQuery, clearEditor })
 </script>
 
 <style scoped>
 .sql-editor { height: 100%; display: flex; flex-direction: column; }
-.editor-toolbar { display: flex; justify-content: space-between; align-items: center; padding: 8px; border-bottom: 1px solid #f0f0f0; background: #fafafa; }
+.editor-toolbar { flex-shrink: 0; display: flex; justify-content: space-between; align-items: center; padding: 8px; border-bottom: 1px solid #f0f0f0; background: #fafafa; }
 .toolbar-left { display: flex; align-items: center; gap: 8px; }
 .execute-time { font-size: 12px; color: #909399; }
-.editor-container { flex: 1; min-height: 150px; position: relative; }
-.result-container { height: 400px; border-top: 1px solid #f0f0f0; }
+.editor-container { flex-shrink: 0; }
+.editor-textarea-plain {
+  width: 100%;
+  height: 100%;
+  border: none;
+  padding: 10px;
+  font-family: monospace;
+  font-size: 14px;
+  resize: none;
+  background-color: #f8f8f8;
+}
+.editor-textarea-plain:focus {
+  outline: none;
+}
+.splitter-horizontal {
+  height: 5px;
+  background: #e8e8e8;
+  cursor: ns-resize;
+  flex-shrink: 0;
+}
+.splitter-horizontal:hover {
+  background: #d9d9d9;
+}
+.result-container { flex: 1; min-height: 100px; display: flex; flex-direction: column; border-top: none; }
 .execution-info { padding: 16px; font-size: 14px; line-height: 1.6; }
-:deep(.ant-tabs-content) { height: calc(100% - 40px); overflow: hidden; }
-:deep(.ant-tab-pane) { height: 100%; overflow: auto; }
+:deep(.ant-tabs-content) { height: 100%; }
+:deep(.ant-tabs-tabpane) { height: 100%; overflow: auto; }
 </style>

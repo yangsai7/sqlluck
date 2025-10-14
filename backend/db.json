@@ -14,36 +14,6 @@
       "clientKeyPath": "",
       "connectTimeout": 5000,
       "timezone": "+00:00"
-    },
-    {
-      "id": "781d7d2d-b22b-4a26-8086-ceeaea2979a5",
-      "name": "test",
-      "host": "192.168.1.126",
-      "port": 3306,
-      "user": "root",
-      "password": "fdc84ed5-d960-482d-83fa-fe8f528a1ab0",
-      "database": "",
-      "useSSL": false,
-      "caPath": "",
-      "clientCertPath": "",
-      "clientKeyPath": "",
-      "connectTimeout": 5000,
-      "timezone": "+00:00"
-    },
-    {
-      "id": "93e4196b-0e74-4e97-a67b-795d69fc20e9",
-      "name": "test",
-      "host": "192.168.1.126",
-      "port": 3306,
-      "user": "root",
-      "password": "fdc84ed5-d960-482d-83fa-fe8f528a1ab0",
-      "database": "",
-      "useSSL": false,
-      "caPath": "",
-      "clientCertPath": "",
-      "clientKeyPath": "",
-      "connectTimeout": 5000,
-      "timezone": "+00:00"
     }
   ]
 }

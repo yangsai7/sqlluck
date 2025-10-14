@@ -1,15 +1,10 @@
 <template>
   <div class="database-tree">
     <div class="tree-header">
-      <a-button type="primary" block @click="showConnectionDialog = true">
-        <template #icon><PlusOutlined /></template>
-        新建连接
-      </a-button>
       <a-input-search
         v-model:value="searchText"
         :placeholder="searchPlaceholder"
         :disabled="!connectionStore.activeDatabaseName"
-        style="margin-top: 16px"
       />
     </div>
 
@@ -61,6 +56,10 @@
                   <template #icon><SnippetsOutlined /></template> 粘贴表
                 </a-menu-item>
 
+                <a-menu-item key="newTable" v-if="dataRef.type === 'database' || (dataRef.type === 'folder' && dataRef.title === '表')">
+                  <template #icon><PlusOutlined /></template> 新建表
+                </a-menu-item>
+
                 <!-- Table Menu -->
                 <a-menu-item
                   key="viewData"
@@ -105,6 +104,20 @@
                   v-if="dataRef.type === 'table' || dataRef.type === 'view'"
                 />
                 <a-menu-item
+                  key="clearTable"
+                  v-if="dataRef.type === 'table'"
+                  danger
+                >
+                  <template #icon><ClearOutlined /></template> 清空表
+                </a-menu-item>
+                <a-menu-item
+                  key="truncateTable"
+                  v-if="dataRef.type === 'table'"
+                  danger
+                >
+                  <template #icon><StopOutlined /></template> 截断表
+                </a-menu-item>
+                <a-menu-item
                   key="deleteTable"
                   v-if="dataRef.type === 'table' || dataRef.type === 'view'"
                   danger
@@ -130,10 +143,7 @@
       </a-tree>
     </div>
 
-    <ConnectionDialog
-      v-model:visible="showConnectionDialog"
-      @connected="handleConnected"
-    />
+
 
     <ConnectionDialog
       v-if="connectionToEdit"
@@ -184,11 +194,12 @@ import {
   EyeOutlined,
   FunctionOutlined,
   EditOutlined,
+  ClearOutlined,
+  StopOutlined,
 } from "@ant-design/icons-vue";
 import { useConnectionStore } from "@/stores/connection";
 import { useQueryStore } from "@/stores/query";
 import { useUIStore } from "@/stores/ui";
-import ConnectionDialog from "./ConnectionDialog.vue";
 import ExportDialog from "./ExportDialog.vue";
 
 const emit = defineEmits(["node-click"]);
@@ -197,7 +208,6 @@ const connectionStore = useConnectionStore();
 const queryStore = useQueryStore();
 const uiStore = useUIStore();
 
-const showConnectionDialog = ref(false);
 const showEditConnectionDialog = ref(false);
 const connectionToEdit = ref(null);
 const ddlVisible = ref(false);
@@ -264,6 +274,8 @@ const treeData = computed(() => {
                 key: `${databaseNode.key}-${group.type}-folder`,
                 title: group.title,
                 type: "folder",
+                database: databaseNode.database,
+                connectionId: databaseNode.connectionId,
                 children: items.map((item) => {
                   const title = item.name || item;
                   const nodeData = {
@@ -273,7 +285,7 @@ const treeData = computed(() => {
                     database,
                     connectionId: connection.id,
                   };
-                  nodeData[group.type] = item; // Pass the whole object/string
+                  nodeData[group.type] = item.name || item;
                   return nodeData;
                 }),
               });
@@ -319,6 +331,14 @@ const handleNodeDoubleClick = async (e, node) => {
     } else {
       expandedKeys.value.push(key);
     }
+  } else if (data.type === 'folder') {
+    const key = data.key;
+    const index = expandedKeys.value.indexOf(key);
+    if (index > -1) {
+      expandedKeys.value.splice(index, 1);
+    } else {
+      expandedKeys.value.push(key);
+    }
   }
 };
 
@@ -331,7 +351,17 @@ const handleNodeSelect = async (selectedKeys, { node }) => {
   }
 
   if (data.type === "database") {
+    const details = connectionStore.connectionDetails[data.connectionId];
+    const dbObjects = details ? details.dbObjects[data.database] : undefined;
     await connectionStore.setActiveDatabase(data.database);
+    if (dbObjects) {
+      uiStore.showObjectsView({ connectionId: data.connectionId, dbName: data.database });
+    }
+  } else if (data.type === 'folder') {
+    if (data.database !== connectionStore.activeDatabaseName) {
+      await connectionStore.setActiveDatabase(data.database);
+    }
+    uiStore.showObjectsView({ connectionId: data.connectionId, dbName: data.database });
   } else if (data.type === "table" || data.type === "view") {
     // We also need to make sure the database is active before emitting
     if (data.database !== connectionStore.activeDatabaseName) {
@@ -385,6 +415,12 @@ const handleContextCommand = async (command, dataRef) => {
     case "renameTable":
       confirmRenameTable(dataRef);
       break;
+    case "clearTable":
+      confirmClearTable(dataRef);
+      break;
+    case "truncateTable":
+      confirmTruncateTable(dataRef);
+      break;
     case "deleteTable":
       confirmDeleteTable(dataRef);
       break;
@@ -398,6 +434,9 @@ const handleContextCommand = async (command, dataRef) => {
     case "export":
       tableToExport.value = dataRef;
       exportDialogVisible.value = true;
+      break;
+    case "newTable":
+      emit("node-click", { ...dataRef, action: "newTable" });
       break;
   }
 };
@@ -511,8 +550,7 @@ const confirmRenameTable = (tableNode) => {
 
         await queryStore.executeQuery(tableNode.connectionId, sql);
         message.success("重命名成功");
-        if (tableNode.type === "view") await connectionStore.loadViews();
-        else await connectionStore.loadTables();
+        await connectionStore.setActiveDatabase(tableNode.database, true); // Force refresh
       } catch (error) {
         message.error(`重命名失败: ${error.message}`);
         return Promise.reject(error);
@@ -558,8 +596,7 @@ const pasteTable = async (dbNode) => {
 
     hide();
     message.success("粘贴成功！");
-    await connectionStore.loadTables();
-    await connectionStore.loadViews();
+    await connectionStore.setActiveDatabase(newDb, true); // Force refresh
   } catch (error) {
     hide();
     message.error(`粘贴失败: ${error.message}`);
@@ -591,6 +628,46 @@ const copyDDL = async () => {
   }
 };
 
+const confirmClearTable = (node) => {
+  Modal.confirm({
+    title: `确认清空表`,
+    content: `您确定要清空表 \"${node.database}.${node.table}\" 中的所有数据吗？此操作不可恢复。`,
+    okText: "确认清空",
+    okType: "danger",
+    cancelText: "取消",
+    onOk: async () => {
+      try {
+        const sql = `DELETE FROM \`${node.database}\`.\`${node.table}\``;
+        await queryStore.executeQuery(node.connectionId, sql);
+        message.success("表已清空");
+        await connectionStore.setActiveDatabase(node.database, true); // Force refresh
+      } catch (error) {
+        message.error(`清空失败: ${error.message}`);
+      }
+    },
+  });
+};
+
+const confirmTruncateTable = (node) => {
+  Modal.confirm({
+    title: `确认截断表`,
+    content: `您确定要截断表 \"${node.database}.${node.table}\" 吗？此操作会重置自增计数器，且不可恢复。`,
+    okText: "确认截断",
+    okType: "danger",
+    cancelText: "取消",
+    onOk: async () => {
+      try {
+        const sql = `TRUNCATE TABLE \`${node.database}\`.\`${node.table}\``;
+        await queryStore.executeQuery(node.connectionId, sql);
+        message.success("表已截断");
+        await connectionStore.setActiveDatabase(node.database, true); // Force refresh
+      } catch (error) {
+        message.error(`截断失败: ${error.message}`);
+      }
+    },
+  });
+};
+
 const confirmDeleteTable = (node) => {
   Modal.confirm({
     title: `确认删除${node.type === "view" ? "视图" : "表"}`,
@@ -607,8 +684,7 @@ const confirmDeleteTable = (node) => {
         }\``;
         await queryStore.executeQuery(node.connectionId, sql);
         message.success("删除成功");
-        if (node.type === "view") await connectionStore.loadViews();
-        else await connectionStore.loadTables();
+        await connectionStore.setActiveDatabase(node.database, true); // Force refresh
       } catch (error) {
         message.error(`删除失败: ${error.message}`);
       }
@@ -632,11 +708,6 @@ const deleteConnection = (connectionId) => {
       }
     },
   });
-};
-
-const handleConnected = () => {
-  message.success("连接创建成功");
-  showConnectionDialog.value = false;
 };
 
 const handleUpdated = () => {
@@ -702,3 +773,4 @@ onMounted(() => {
   font-family: "Monaco", "Menlo", "Ubuntu Mono", monospace;
 }
 </style>
+

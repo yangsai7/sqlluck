@@ -52,14 +52,21 @@ class MySQLConnection {
         }
     }
 
-    async query(sql, params = []) {
+    async query(sql, params = [], database = null) {
         const startTime = performance.now();
+        let connection;
         try {
             if (!this.pool) {
                 throw new Error('数据库未连接');
             }
 
-            const [rows, fields] = await this.pool.execute(sql, params);
+            connection = await this.pool.getConnection();
+
+            if (database) {
+                await connection.changeUser({ database });
+            }
+
+            const [rows, fields] = await connection.execute(sql, params);
             const endTime = performance.now();
             const executeTime = `${(endTime - startTime).toFixed(2)} ms`;
 
@@ -76,6 +83,10 @@ class MySQLConnection {
                 error: error.message,
                 code: error.code
             };
+        } finally {
+            if (connection) {
+                connection.release();
+            }
         }
     }
 

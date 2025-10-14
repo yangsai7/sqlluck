@@ -183,7 +183,7 @@ const exportData = () => {
 .result-container { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
 .result-header { display: flex; justify-content: space-between; align-items: center; padding: 8px; border-bottom: 1px solid #f0f0f0; background: #fafafa; }
 .result-info { font-size: 13px; color: #595959; }
-.table-container { flex: 1; overflow: hidden; }
+.table-container { flex: 1; overflow: auto; }
 .cell-content { min-height: 20px; }
 .null-value { color: #bfbfbf; font-style: italic; }
 .long-text { cursor: pointer; color: #1890ff; }

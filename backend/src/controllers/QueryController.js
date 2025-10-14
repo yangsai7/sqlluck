@@ -7,7 +7,7 @@ class QueryController {
     static async executeQuery(req, res) {
         try {
             const { connectionId } = req.params;
-            const { sql, params = [] } = req.body;
+            const { database, sql, params = [] } = req.body;
 
             if (!sql) {
                 return res.status(400).json({
@@ -24,15 +24,10 @@ class QueryController {
                 });
             }
 
-            const startTime = Date.now();
-            const result = await connection.query(sql, params);
-            const executeTime = Date.now() - startTime;
+            const result = await connection.query(sql, params, database);
 
             if (result.success) {
-                res.json({
-                    ...result,
-                    executeTime: `${executeTime}ms`
-                });
+                res.json(result);
             } else {
                 res.status(400).json(result);
             }

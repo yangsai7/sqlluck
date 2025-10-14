@@ -53,7 +53,8 @@
           "target": "dmg",
           "arch": ["x64", "arm64"]
         }
-      ]
+      ],
+      "icon": "assets/icons/mac/icon.icns"
     },
     "win": {
       "target": [
@@ -61,7 +62,8 @@
           "target": "nsis",
           "arch": ["x64", "ia32"]
         }
-      ]
+      ],
+      "icon": "assets/icons/win/icon.ico"
     },
     "linux": {
       "target": [

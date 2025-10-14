@@ -50,6 +50,23 @@ export const useUIStore = defineStore('ui', {
       this.activeMainTab = tabName;
     },
 
+    openNewTableTab(tabInfo) { // { database }
+      const tabName = `new-table-${tabInfo.database}`;
+      const existingTab = this.dataTabs.find(tab => tab.name === tabName);
+
+      if (!existingTab) {
+        const tabLabel = `新建表`;
+        this.dataTabs.push({
+          name: tabName,
+          label: tabLabel,
+          type: 'new_table',
+          database: tabInfo.database,
+          table: null
+        });
+      }
+      this.activeMainTab = tabName;
+    },
+
     closeDataTab(tabKey) {
       const index = this.dataTabs.findIndex(tab => tab.name === tabKey);
       if (index > -1) {

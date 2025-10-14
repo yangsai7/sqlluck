@@ -40,30 +40,55 @@ export const SQL_OPERATORS = [
 // SQL语法高亮器
 export class SQLHighlighter {
   static highlight(sql) {
-    if (!sql) return ''
+    if (!sql) return '';
 
-    let highlighted = sql
+    const placeholders = [];
+    let placeholderId = 0;
 
-    // 1. 优先处理字符串和注释，防止其内容被错误高亮
-    highlighted = highlighted.replace(/'([^']*)'/g, `<span class='sql-string'>'$1'</span>`)
-    highlighted = highlighted.replace(/"([^"]*)"/g, `<span class='sql-string'>"$1"</span>`)
-    highlighted = highlighted.replace(/--.*$/gm, `<span class='sql-comment'>$&</span>`)
-    highlighted = highlighted.replace(/\/\*[\s\S]*?\*\//g, `<span class='sql-comment'>$&</span>`)
+    // Use a temporary, safe placeholder that won't be in the SQL
+    const placeholderPrefix = '___SQL_HL_PLACEHOLDER_';
+    const placeholderSuffix = '___';
 
-    // 2. 处理关键字、数字和操作符
-    SQL_KEYWORDS.forEach(keyword => {
-      const regex = new RegExp(`\\b${keyword}\\b`, 'gi')
-      highlighted = highlighted.replace(regex, `<span class='sql-keyword'>${keyword.toUpperCase()}</span>`)
-    })
+    // 1. Replace strings and comments with placeholders
+    let processedSql = sql
+      .replace(/'[^']*'/g, (match) => {
+        const placeholder = `${placeholderPrefix}${placeholderId++}${placeholderSuffix}`;
+        placeholders.push(`<span class='sql-string'>${match}</span>`);
+        return placeholder;
+      })
+      .replace(/"[^"]*"/g, (match) => {
+        const placeholder = `${placeholderPrefix}${placeholderId++}${placeholderSuffix}`;
+        placeholders.push(`<span class='sql-string'>${match}</span>`);
+        return placeholder;
+      })
+      .replace(/--.*$/gm, (match) => {
+        const placeholder = `${placeholderPrefix}${placeholderId++}${placeholderSuffix}`;
+        placeholders.push(`<span class='sql-comment'>${match}</span>`);
+        return placeholder;
+      })
+      .replace(/\/\*[\s\S]*?\*\//g, (match) => {
+        const placeholder = `${placeholderPrefix}${placeholderId++}${placeholderSuffix}`;
+        placeholders.push(`<span class='sql-comment'>${match}</span>`);
+        return placeholder;
+      });
 
-    highlighted = highlighted.replace(/\b\d+\.?\d*\b/g, `<span class='sql-number'>$&</span>`)
+    // 2. Highlight keywords, numbers, operators on the rest
+    const allKeywordsRegex = new RegExp(`\\b(${SQL_KEYWORDS.join('|')})\\b`, 'gi');
+    processedSql = processedSql.replace(allKeywordsRegex, (match) => 
+        `<span class='sql-keyword'>${match.toUpperCase()}</span>`
+    );
 
-    SQL_OPERATORS.forEach(op => {
-      const escapedOp = op.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-      highlighted = highlighted.replace(new RegExp(escapedOp, 'g'), `<span class='sql-operator'>${op}</span>`)
-    })
+    processedSql = processedSql.replace(/\b\d+\.?\d*\b/g, `<span class='sql-number'>$&</span>`);
 
-    return highlighted
+    const allOperatorsRegex = new RegExp(`(${SQL_OPERATORS.map(op => op.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})`, 'g');
+    processedSql = processedSql.replace(allOperatorsRegex, `<span class='sql-operator'>$1</span>`);
+
+    // 3. Restore strings and comments
+    for (let i = 0; i < placeholders.length; i++) {
+      processedSql = processedSql.replace(`${placeholderPrefix}${i}${placeholderSuffix}`, placeholders[i]);
+    }
+
+    return processedSql;
   }
 }
 
