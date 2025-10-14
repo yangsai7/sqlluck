@@ -1,12 +1,12 @@
 # MySQL Client App
 
-一个独立的MySQL数据库客户端管理工具，基于原VS Code数据库扩展改造。
+一个独立的 MySQL 数据库客户端管理工具，基于原 VS Code 数据库扩展改造。
 
 ## 特性
 
-- 🔗 MySQL数据库连接管理
+- 🔗 MySQL 数据库连接管理
 - 🗂️ 数据库和表结构浏览
-- 📝 SQL查询编辑器（语法高亮）
+- 📝 SQL 查询编辑器（语法高亮）
 - 📊 查询结果展示和数据编辑
 - 📤 数据导入导出功能
 - 🖥️ 跨平台桌面应用
@@ -47,3 +47,9 @@ mysql-client-app/
 ├── electron/         # Electron主进程
 └── package.json      # 项目配置
 ```
+
+## 项目截图
+
+![项目截图](docs/images/eg1.png)
+![项目截图](docs/images/eg2.png)
+![项目截图](docs/images/eg3.png)
