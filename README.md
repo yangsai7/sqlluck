@@ -1,6 +1,6 @@
 # MySQL Client App
 
-一个独立的 MySQL 数据库客户端管理工具，基于原 VS Code 数据库扩展改造。
+一个独立的 MySQL 数据库客户端管理工具，基于 electron+vue+ts 构建(目前还有很多需要完善和优化的地方需要去做, 努力开发中)。
 
 ## 特性
 
