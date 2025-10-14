@@ -234,9 +234,9 @@ const removeIndex = (id) => {
 const loadOptions = async () => {
     try {
         const [enginesRes, charsetsRes, collationsRes] = await Promise.all([
-            queryStore.executeQuery(props.connectionId, 'SHOW ENGINES'),
-            queryStore.executeQuery(props.connectionId, 'SHOW CHARACTER SET'),
-            queryStore.executeQuery(props.connectionId, 'SHOW COLLATION'),
+            queryStore.executeQuery(props.connectionId, props.database, 'SHOW ENGINES'),
+            queryStore.executeQuery(props.connectionId, props.database, 'SHOW CHARACTER SET'),
+            queryStore.executeQuery(props.connectionId, props.database, 'SHOW COLLATION'),
         ]);
         if (enginesRes.success) engines.value = enginesRes.data;
         if (charsetsRes.success) charsets.value = charsetsRes.data;
@@ -303,7 +303,7 @@ const createTable = async () => {
 
     loading.value = true;
     try {
-        await queryStore.executeQuery(props.connectionId, previewSql.value);
+        await queryStore.executeQuery(props.connectionId, props.database, previewSql.value);
         message.success('表创建成功');
         // TODO: Close tab and refresh tree
     } catch (error) {

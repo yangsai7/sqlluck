@@ -26,7 +26,7 @@
           size="small"
           placeholder="选择数据库"
           style="width: 150px"
-          @change="connectionStore.setActiveDatabase"
+          @change="handleDatabaseChange"
           :options="databaseOptions"
         />
       </div>
@@ -38,12 +38,15 @@
     </div>
 
     <div class="editor-container" :style="{ height: editorHeight + 'px' }">
-      <textarea
-        ref="editorRef"
+      <codemirror
         v-model="currentSql"
-        class="editor-textarea-plain"
         placeholder="请输入 SQL 查询语句..."
-        @keydown="handleKeydown"
+        :style="{ height: '100%' }"
+        :autofocus="true"
+        :indent-with-tab="true"
+        :tab-size="2"
+        :extensions="extensions"
+        @ready="handleReady"
       />
     </div>
 
@@ -79,25 +82,60 @@
 </template>
 
 <script setup>
-import { ref, onMounted, watch, computed } from 'vue'
+import { ref, onMounted, watch, computed, shallowRef } from 'vue'
 import { message } from 'ant-design-vue'
 import { PlayCircleOutlined, RedoOutlined, DeleteOutlined } from '@ant-design/icons-vue'
 import { useConnectionStore } from '@/stores/connection'
 import { useQueryStore } from '@/stores/query'
+import { useSchemaStore } from '@/stores/schema'
 import { sqlUtils } from '@/utils/sqlUtils'
 import QueryResult from './QueryResult.vue'
 import QueryHistory from './QueryHistory.vue'
 import './sql-editor.css'
+import { Codemirror } from 'vue-codemirror'
+import { sql, MySQL } from '@codemirror/lang-sql'
+import { keymap } from '@codemirror/view'
+import { autocompletion } from '@codemirror/autocomplete'
 
 const connectionStore = useConnectionStore()
 const queryStore = useQueryStore()
+const schemaStore = useSchemaStore()
 
-const editorRef = ref()
 const sqlEditorRoot = ref()
 const editorToolbar = ref()
 const currentSql = ref('')
 const activeTab = ref('result')
 const editorHeight = ref(250)
+
+const view = shallowRef()
+const handleReady = (payload) => {
+  view.value = payload.view
+}
+
+const extensions = computed(() => {
+  const schemaConfig = {
+    dialect: MySQL,
+    schema: {},
+    upperCaseKeywords: true,
+    defaultDatabase: connectionStore.activeDatabaseName,
+  };
+
+  const schema = schemaStore.getSchema(connectionStore.activeDatabaseName);
+  if (schema && schema.tables) {
+    const schemaForSqlLang = {};
+    schema.tables.forEach(table => {
+      if (table.columns) {
+        schemaForSqlLang[table.tableName.toLowerCase()] = table.columns.map(c => c.Field.toLowerCase());
+      }
+    });
+    schemaConfig.schema = schemaForSqlLang;
+  }
+
+  return [
+    sql(schemaConfig),
+    autocompletion()
+  ];
+});
 
 const databaseOptions = computed(() => 
   connectionStore.databases.map(db => ({ label: db, value: db }))
@@ -106,6 +144,11 @@ const databaseOptions = computed(() =>
 watch(currentSql, (newSql) => {
   queryStore.setCurrentQuery(newSql)
 })
+
+const handleDatabaseChange = (dbName) => {
+  connectionStore.setActiveDatabase(dbName)
+  schemaStore.fetchSchema(connectionStore.activeConnectionId, dbName)
+}
 
 const startDrag = (e) => {
   e.preventDefault()
@@ -154,26 +197,20 @@ const formatSQL = () => { currentSql.value = sqlUtils.format(currentSql.value) }
 const clearEditor = () => { currentSql.value = ''; queryStore.clearResults() }
 const loadHistoryQuery = (sql) => { currentSql.value = sql; activeTab.value = 'result' }
 
-const handleKeydown = (event) => {
-  if (event.key === 'F9') { event.preventDefault(); executeQuery() }
-  if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') { event.preventDefault(); executeQuery() }
-}
-
 const insertSqlTemplate = (template) => {
-  const textarea = editorRef.value
-  const start = textarea.selectionStart
-  const end = textarea.selectionEnd
-  const currentValue = currentSql.value
-  currentSql.value = currentValue.substring(0, start) + template + currentValue.substring(end)
-  setTimeout(() => {
-    textarea.focus()
-    textarea.setSelectionRange(start + template.length, start + template.length)
-  }, 0)
+  if (view.value) {
+    const { from, to } = view.value.state.selection.main;
+    view.value.dispatch({
+      changes: { from, to, insert: template }
+    });
+  }
 }
 
 onMounted(() => {
   queryStore.loadHistoryFromStorage()
-  setTimeout(() => { editorRef.value?.focus() }, 100)
+  if (connectionStore.activeDatabaseName) {
+    schemaStore.fetchSchema(connectionStore.activeConnectionId, connectionStore.activeDatabaseName)
+  }
 })
 
 defineExpose({ insertSqlTemplate, executeQuery, clearEditor })
@@ -185,19 +222,7 @@ defineExpose({ insertSqlTemplate, executeQuery, clearEditor })
 .toolbar-left { display: flex; align-items: center; gap: 8px; }
 .execute-time { font-size: 12px; color: #909399; }
 .editor-container { flex-shrink: 0; }
-.editor-textarea-plain {
-  width: 100%;
-  height: 100%;
-  border: none;
-  padding: 10px;
-  font-family: monospace;
-  font-size: 14px;
-  resize: none;
-  background-color: #f8f8f8;
-}
-.editor-textarea-plain:focus {
-  outline: none;
-}
+
 .splitter-horizontal {
   height: 5px;
   background: #e8e8e8;

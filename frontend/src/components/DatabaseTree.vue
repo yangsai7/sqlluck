@@ -443,8 +443,8 @@ const handleContextCommand = async (command, dataRef) => {
 
 const confirmNewDatabase = async (connectionNode) => {
   // Fetch charsets and collations first
-  const charsetResult = await queryStore.executeQuery(connectionNode.key, 'SHOW CHARACTER SET');
-  const collationResult = await queryStore.executeQuery(connectionNode.key, 'SHOW COLLATION');
+  const charsetResult = await queryStore.executeQuery(connectionNode.key, null, 'SHOW CHARACTER SET');
+  const collationResult = await queryStore.executeQuery(connectionNode.key, null, 'SHOW COLLATION');
 
   if (!charsetResult.success || !collationResult.success) {
       message.error("无法获取字符集和排序规则列表");
@@ -505,7 +505,7 @@ const confirmNewDatabase = async (connectionNode) => {
         if (newDbInfo.collation) {
             sql += ` COLLATE ${newDbInfo.collation}`;
         }
-        await queryStore.executeQuery(connectionNode.key, sql);
+        await queryStore.executeQuery(connectionNode.key, null, sql);
         message.success("数据库创建成功");
         await connectionStore.loadDatabases(); // Refresh database list
       } catch (error) {
@@ -548,7 +548,7 @@ const confirmRenameTable = (tableNode) => {
           newTableName +
           "`";
 
-        await queryStore.executeQuery(tableNode.connectionId, sql);
+        await queryStore.executeQuery(tableNode.connectionId, tableNode.database, sql);
         message.success("重命名成功");
         await connectionStore.setActiveDatabase(tableNode.database, true); // Force refresh
       } catch (error) {
@@ -572,6 +572,7 @@ const pasteTable = async (dbNode) => {
     }\``;
     const ddlResult = await queryStore.executeQuery(
       sourceObject.connectionId,
+      sourceObject.database,
       ddlSql
     );
 
@@ -586,13 +587,13 @@ const pasteTable = async (dbNode) => {
       `CREATE TABLE \`${newDb}\`.\`${newName}\``
     );
 
-    await queryStore.executeQuery(sourceObject.connectionId, createSql);
+    await queryStore.executeQuery(sourceObject.connectionId, newDb, createSql);
 
     // ✅ 修复 SQL 拼接语法
     const insertSql = `INSERT INTO \`${newDb}\`.\`${newName}\` SELECT * FROM \`${
       sourceObject.database
     }\`.\`${sourceObject.table || sourceObject.view}\``;
-    await queryStore.executeQuery(sourceObject.connectionId, insertSql);
+    await queryStore.executeQuery(sourceObject.connectionId, newDb, insertSql);
 
     hide();
     message.success("粘贴成功！");
@@ -608,7 +609,7 @@ const showDDL = async (node) => {
     const sql = `SHOW CREATE ${node.type.toUpperCase()} \`${
       node.database
     }\`.\`${node.table || node.view}\``;
-    const result = await queryStore.executeQuery(node.connectionId, sql);
+    const result = await queryStore.executeQuery(node.connectionId, node.database, sql);
     if (result.success && result.data.length > 0) {
       ddlContent.value =
         result.data[0]["Create Table"] || result.data[0]["Create View"];
@@ -638,7 +639,7 @@ const confirmClearTable = (node) => {
     onOk: async () => {
       try {
         const sql = `DELETE FROM \`${node.database}\`.\`${node.table}\``;
-        await queryStore.executeQuery(node.connectionId, sql);
+        await queryStore.executeQuery(node.connectionId, node.database, sql);
         message.success("表已清空");
         await connectionStore.setActiveDatabase(node.database, true); // Force refresh
       } catch (error) {
@@ -658,7 +659,7 @@ const confirmTruncateTable = (node) => {
     onOk: async () => {
       try {
         const sql = `TRUNCATE TABLE \`${node.database}\`.\`${node.table}\``;
-        await queryStore.executeQuery(node.connectionId, sql);
+        await queryStore.executeQuery(node.connectionId, node.database, sql);
         message.success("表已截断");
         await connectionStore.setActiveDatabase(node.database, true); // Force refresh
       } catch (error) {
@@ -682,7 +683,7 @@ const confirmDeleteTable = (node) => {
         const sql = `DROP ${node.type.toUpperCase()} \`${node.database}\`.\`${
           node.table || node.view
         }\``;
-        await queryStore.executeQuery(node.connectionId, sql);
+        await queryStore.executeQuery(node.connectionId, node.database, sql);
         message.success("删除成功");
         await connectionStore.setActiveDatabase(node.database, true); // Force refresh
       } catch (error) {

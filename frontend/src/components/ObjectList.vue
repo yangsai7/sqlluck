@@ -261,7 +261,7 @@ ${node.database}
 .
 ${node.table}
 `;
-    const result = await queryStore.executeQuery(node.connectionId, sql);
+    const result = await queryStore.executeQuery(node.connectionId, node.database, sql);
     if (result.success && result.data.length > 0) {
       ddlContent.value = result.data[0]["Create Table"];
       ddlVisible.value = true;
@@ -311,7 +311,7 @@ ${tableNode.database}
 .
 ${newTableName}
 `;
-        await queryStore.executeQuery(tableNode.connectionId, sql);
+        await queryStore.executeQuery(tableNode.connectionId, tableNode.database, sql);
         message.success("重命名成功");
         await connectionStore.setActiveDatabase(tableNode.database, true); // Force refresh
       } catch (error) {
@@ -336,7 +336,7 @@ ${node.database}
 .
 ${node.table}
 `;
-        await queryStore.executeQuery(node.connectionId, sql);
+        await queryStore.executeQuery(node.connectionId, node.database, sql);
         await connectionStore.setActiveDatabase(node.database, true); // Force refresh
       } catch (error) {
         message.error(`清空失败: ${error.message}`);
@@ -359,7 +359,7 @@ ${node.database}
 .
 ${node.table}
 `;
-        await queryStore.executeQuery(node.connectionId, sql);
+        await queryStore.executeQuery(node.connectionId, node.database, sql);
         await connectionStore.setActiveDatabase(node.database, true); // Force refresh
       } catch (error) {
         message.error(`截断失败: ${error.message}`);
@@ -382,7 +382,7 @@ ${node.database}
 .
 ${node.table}
 `;
-        await queryStore.executeQuery(node.connectionId, sql);
+        await queryStore.executeQuery(node.connectionId, node.database, sql);
         message.success("删除成功");
         await connectionStore.setActiveDatabase(node.database, true); // Force refresh
       } catch (error) {
