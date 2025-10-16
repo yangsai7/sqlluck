@@ -22,12 +22,21 @@
         </a-button>
         <a-divider type="vertical" />
         <a-select
-          v-model:value="connectionStore.activeDatabaseName"
+          v-model:value="selectedConnectionId"
+          size="small"
+          placeholder="选择连接"
+          style="width: 150px"
+          @change="handleConnectionChange"
+          :options="connectionOptions"
+        />
+        <a-select
+          v-model:value="selectedDatabaseName"
           size="small"
           placeholder="选择数据库"
           style="width: 150px"
           @change="handleDatabaseChange"
           :options="databaseOptions"
+          :disabled="!selectedConnectionId"
         />
       </div>
       <div class="toolbar-right">
@@ -107,6 +116,10 @@ const currentSql = ref('')
 const activeTab = ref('result')
 const editorHeight = ref(250)
 
+// Local state for connection and database
+const selectedConnectionId = ref(null);
+const selectedDatabaseName = ref(null);
+
 const view = shallowRef()
 const handleReady = (payload) => {
   view.value = payload.view
@@ -117,10 +130,10 @@ const extensions = computed(() => {
     dialect: MySQL,
     schema: {},
     upperCaseKeywords: true,
-    defaultDatabase: connectionStore.activeDatabaseName,
+    defaultDatabase: selectedDatabaseName.value,
   };
 
-  const schema = schemaStore.getSchema(connectionStore.activeDatabaseName);
+  const schema = schemaStore.getSchema(selectedDatabaseName.value);
   if (schema && schema.tables) {
     const schemaForSqlLang = {};
     schema.tables.forEach(table => {
@@ -137,17 +150,36 @@ const extensions = computed(() => {
   ];
 });
 
-const databaseOptions = computed(() => 
-  connectionStore.databases.map(db => ({ label: db, value: db }))
+const connectionOptions = computed(() => 
+  connectionStore.connections.map(conn => ({ label: conn.name || conn.host, value: conn.id }))
 )
+
+const databaseOptions = computed(() => {
+  if (!selectedConnectionId.value) return [];
+  const details = connectionStore.connectionDetails[selectedConnectionId.value];
+  return details?.databases.map(db => ({ label: db, value: db })) || [];
+})
 
 watch(currentSql, (newSql) => {
   queryStore.setCurrentQuery(newSql)
 })
 
+const handleConnectionChange = async (connId) => {
+  selectedConnectionId.value = connId;
+  // Reset database selection
+  selectedDatabaseName.value = null;
+  // Load databases for the new connection if not already loaded
+  const details = connectionStore.connectionDetails[connId];
+  if (!details || details.databases.length === 0) {
+    await connectionStore.setActiveConnection(connId); // This will also load databases
+  }
+};
+
 const handleDatabaseChange = (dbName) => {
-  connectionStore.setActiveDatabase(dbName)
-  schemaStore.fetchSchema(connectionStore.activeConnectionId, dbName)
+  selectedDatabaseName.value = dbName;
+  if (selectedConnectionId.value) {
+    schemaStore.fetchSchema(selectedConnectionId.value, dbName)
+  }
 }
 
 const startDrag = (e) => {
@@ -179,14 +211,14 @@ const executeQuery = async () => {
   if (!currentSql.value.trim()) {
     message.warning('请输入SQL语句'); return;
   }
-  if (!connectionStore.activeConnectionId) {
-    message.warning('请先连接数据库'); return;
+  if (!selectedConnectionId.value) {
+    message.warning('请先选择一个连接'); return;
   }
-  if (!connectionStore.activeDatabaseName) {
+  if (!selectedDatabaseName.value) {
     message.warning('请先选择一个数据库'); return;
   }
   try {
-    await queryStore.executeQuery(connectionStore.activeConnectionId, connectionStore.activeDatabaseName, currentSql.value.trim())
+    await queryStore.executeQuery(selectedConnectionId.value, selectedDatabaseName.value, currentSql.value.trim())
     activeTab.value = 'result'
   } catch (error) {
     activeTab.value = 'result'
@@ -208,8 +240,13 @@ const insertSqlTemplate = (template) => {
 
 onMounted(() => {
   queryStore.loadHistoryFromStorage()
+  // Initialize with global state
+  if (connectionStore.activeConnectionId) {
+    selectedConnectionId.value = connectionStore.activeConnectionId;
+  }
   if (connectionStore.activeDatabaseName) {
-    schemaStore.fetchSchema(connectionStore.activeConnectionId, connectionStore.activeDatabaseName)
+    selectedDatabaseName.value = connectionStore.activeDatabaseName;
+    schemaStore.fetchSchema(selectedConnectionId.value, selectedDatabaseName.value)
   }
 })
 
