@@ -9,6 +9,7 @@ export const useUIStore = defineStore('ui', {
     clipboard: null, // { type: 'table', data: { ... } | [{...}] }
     activeMainTab: 'objects', // The key of the active tab in Home.vue
     objectsViewTarget: null, // { connectionId, dbName }
+    objectListFilter: 'tables', // 'tables', 'views', 'functions'
     dataTabs: [], // { name, label, type, database, table }
   }),
 
@@ -19,6 +20,10 @@ export const useUIStore = defineStore('ui', {
 
     clearClipboard() {
       this.clipboard = null;
+    },
+
+    setObjectListFilter(filter) {
+      this.objectListFilter = filter;
     },
 
         async paste(targetDb) {

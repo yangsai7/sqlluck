@@ -8,13 +8,17 @@
       <template #icon><CodeOutlined /></template>
       新建查询
     </a-button>
+    <a-button type="text" size="large" @click="handleMenuClick('tables')">
+      <template #icon><TableOutlined /></template>
+      表
+    </a-button>
     <a-button type="text" size="large" @click="handleMenuClick('views')">
       <template #icon><EyeOutlined /></template>
       视图
     </a-button>
-    <a-button type="text" size="large" @click="handleMenuClick('functions')">
+    <a-button type="text" size="large" @click="handleMenuClick('procedures')">
       <template #icon><FunctionOutlined /></template>
-      函数
+      存储过程
     </a-button>
     <a-button type="text" size="large" @click="handleMenuClick('users')">
       <template #icon><UserOutlined /></template>
@@ -40,6 +44,7 @@ import {
   FunctionOutlined,
   UserOutlined,
   BarChartOutlined,
+  TableOutlined,
 } from '@ant-design/icons-vue';
 import ConnectionDialog from './ConnectionDialog.vue';
 import { useUIStore } from '@/stores/ui';
@@ -53,6 +58,9 @@ const handleMenuClick = (action) => {
     showConnectionDialog.value = true;
   } else if (action === 'new-query') {
     uiStore.setActiveMainTab('query');
+  } else if (['tables', 'views', 'procedures'].includes(action)) {
+    uiStore.setObjectListFilter(action);
+    uiStore.setActiveMainTab('objects');
   } else {
     // Placeholder for other actions
     message.info(`功能 '${action}' 暂未实现`);
