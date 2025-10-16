@@ -74,9 +74,22 @@
             <a-tab-pane
               v-for="tab in uiStore.dataTabs"
               :key="tab.name"
-              :tab="tab.label"
               :closable="true"
             >
+              <template #tab>
+                <span @dblclick="startRenaming(tab.name)" v-if="renamingTab !== tab.name">
+                  {{ tab.label }}
+                </span>
+                <a-input
+                  v-else
+                  :ref="el => tabInputRefs[tab.name] = el"
+                  v-model:value="tab.label"
+                  size="small"
+                  style="width: 120px;"
+                  @blur="finishRenaming(tab.name)"
+                  @pressEnter="finishRenaming(tab.name)"
+                />
+              </template>
               <SqlEditor
                 v-if="tab.type === 'query'"
                 :initial-sql="tab.sql"
@@ -119,7 +132,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, nextTick } from 'vue'
 import { UploadOutlined, SyncOutlined } from '@ant-design/icons-vue'
 
 import { useConnectionStore } from '@/stores/connection'
@@ -138,6 +151,22 @@ const uiStore = useUIStore()
 const selectedTable = ref('')
 const sqlEditorRef = ref()
 const showImportExportDialog = ref(false)
+const renamingTab = ref(null);
+const tabInputRefs = ref({});
+
+const startRenaming = async (tabKey) => {
+  renamingTab.value = tabKey;
+  await nextTick();
+  tabInputRefs.value[tabKey]?.focus();
+};
+
+const finishRenaming = (tabKey) => {
+  const newName = uiStore.dataTabs.find(t => t.name === tabKey)?.label;
+  if (newName) {
+    uiStore.renameTab(tabKey, newName);
+  }
+  renamingTab.value = null;
+};
 
 // 处理树节点点击
 const handleNodeClick = (data) => {

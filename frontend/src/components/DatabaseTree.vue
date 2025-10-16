@@ -200,6 +200,7 @@ import {
 import { useConnectionStore } from "@/stores/connection";
 import { useQueryStore } from "@/stores/query";
 import { useUIStore } from "@/stores/ui";
+import ConnectionDialog from "./ConnectionDialog.vue";
 import ExportDialog from "./ExportDialog.vue";
 
 const emit = defineEmits(["node-click"]);

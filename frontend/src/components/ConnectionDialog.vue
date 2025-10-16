@@ -215,24 +215,29 @@ const handleSubmit = async () => {
 
 // 关闭对话框
 const handleClose = () => {
-  formRef.value.resetFields()
-  Object.assign(form, initialFormState)
   emit('update:visible', false)
 }
 
-// 适配 v-model:visible 和 edit mode
-watch(() => props.visible, (val) => {
-  if (val) {
-    if (isEditMode.value) {
-      Object.assign(form, props.connection)
-      form.password = '' // Do not show existing password
-    } else {
-      Object.assign(form, initialFormState)
-    }
+// Watch for connection prop changes to populate the form
+watch(() => props.connection, (newConnection) => {
+  if (newConnection) {
+    // Edit mode
+    Object.assign(form, newConnection);
+    form.password = ''; // Clear password for security
   } else {
-    handleClose()
+    // Create mode
+    formRef.value?.resetFields();
+    Object.assign(form, initialFormState);
   }
-})
+}, { immediate: true });
+
+// Watch for visibility changes to reset form on close
+watch(() => props.visible, (isVisible) => {
+  if (!isVisible) {
+    formRef.value?.resetFields();
+    Object.assign(form, initialFormState);
+  }
+});
 </script>
 
 <style scoped>

@@ -178,6 +178,13 @@ export const useUIStore = defineStore('ui', {
       }
     },
 
+    renameTab(tabKey, newName) {
+      const tab = this.dataTabs.find(tab => tab.name === tabKey);
+      if (tab) {
+        tab.label = newName;
+      }
+    },
+
     closeTabsForConnection(connectionId) {
       this.dataTabs = this.dataTabs.filter(tab => tab.connectionId !== connectionId);
       if (this.activeMainTab !== 'objects' && this.activeMainTab !== 'query') {
