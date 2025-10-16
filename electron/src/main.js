@@ -96,7 +96,8 @@ function startBackendService() {
   if (fs.existsSync(backendPath)) {
     const args = [`--appdata=${userDataPath}`];
     backendProcess = spawn(backendPath, args, {
-      stdio: ['inherit'], // pipe stdout and stderr
+      //stdio: ['inherit'], // pipe stdout and stderr
+      stdio: ['pipe', 'pipe', 'pipe'],
       env: { 
         ...process.env, 
         PORT: '3001',
