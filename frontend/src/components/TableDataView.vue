@@ -173,6 +173,11 @@ const customRow = (record) => {
       const key = getRowKey(record);
       if (!key) return;
 
+      // Do not trigger row selection if the click is on an input inside the cell
+      if (event.target.tagName === 'INPUT') {
+        return;
+      }
+
       const currentKeys = [...selectedRowKeys.value];
       const data = filteredData.value;
       const allKeys = data.map(r => getRowKey(r));
@@ -268,10 +273,13 @@ const setEditingCell = (record, column) => {
 const validateCellValue = (value, field) => {
   if (value === null || value === '') return { isValid: true }; // Allow null/empty
 
-  const fieldType = fields.value.find(f => f.name === field.name)?.type.toLowerCase() || '';
+  const fieldInfo = fields.value.find(f => f.name === field.name);
+  if (!fieldInfo) return { isValid: true }; // No validation if field info not found
+
+  const fieldType = fieldInfo.type.toLowerCase();
 
   if (fieldType.includes('int') || fieldType.includes('decimal') || fieldType.includes('float') || fieldType.includes('double') || fieldType.includes('bit')) {
-    if (isNaN(Number(value))) {
+    if (value !== '' && isNaN(Number(value))) {
       return { isValid: false, message: `字段 ${field.name} 需要一个有效的数值。` };
     }
   }
@@ -343,6 +351,13 @@ const submitChanges = async () => {
   // Handle inserts for new rows
   const insertPromises = newRows.map(newRow => {
     const rowData = { ...newRow };
+    // Validate all fields in the new row before inserting
+    for (const field of fields.value) {
+      const validation = validateCellValue(rowData[field.name], field);
+      if (!validation.isValid) {
+        throw new Error(validation.message);
+      }
+    }
     delete rowData.__isNew;
     delete rowData.__tempId;
     return queryStore.insertData(props.connectionId, props.database, props.table, rowData);
