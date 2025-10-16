@@ -251,8 +251,8 @@ const handleContextCommand = async (command, record) => {
         return;
       }
       // Fallthrough for single item
-      if (command === 'viewData') uiStore.openDataTab({ table: firstNode.table, database: firstNode.database, type: 'data' });
-      if (command === 'viewStructure') uiStore.openDataTab({ table: firstNode.table, database: firstNode.database, type: 'structure' });
+      if (command === 'viewData') uiStore.openDataTab({ connectionId: firstNode.connectionId, table: firstNode.table, database: firstNode.database, type: 'data' });
+      if (command === 'viewStructure') uiStore.openDataTab({ connectionId: firstNode.connectionId, table: firstNode.table, database: firstNode.database, type: 'structure' });
       if (command === 'viewDDL') await showDDL(firstNode);
       if (command === 'renameTable') confirmRenameTable(firstNode);
       break;

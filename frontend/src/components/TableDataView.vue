@@ -63,7 +63,7 @@
         bordered
         :scroll="{ y: '100%', x: 'max-content' }"
         :pagination="false"
-        :row-key="primaryKey"
+        :row-key="getRowKey"
         :custom-row="customRow"
         :row-class-name="rowClassName"
         @resizeColumn="handleResizeColumn"
@@ -87,35 +87,6 @@
         </template>
       </a-table>
     </div>
-
-    <a-modal
-      v-model:open="showEditDialog"
-      :title="editMode === 'add' ? '新增数据' : '编辑数据'"
-      width="600px"
-      @ok="saveData"
-      @cancel="showEditDialog = false"
-    >
-      <a-form ref="editFormRef" :model="editForm" layout="vertical">
-        <a-form-item
-          v-for="field in fields"
-          :key="field.name"
-          :label="field.name"
-          :name="field.name"
-        >
-          <a-textarea
-            v-if="isTextField(field)"
-            v-model:value="editForm[field.name]"
-            :rows="3"
-            placeholder="输入值或留空表示NULL"
-          />
-          <a-input
-            v-else
-            v-model:value="editForm[field.name]"
-            placeholder="输入值或留空表示NULL"
-          />
-        </a-form-item>
-      </a-form>
-    </a-modal>
   </div>
 </template>
 
@@ -140,12 +111,7 @@ const fields = ref([])
 const total = ref(0)
 const currentPage = ref(1)
 const pageSize = ref(100)
-
-const showEditDialog = ref(false)
-const editMode = ref('edit')
-const editForm = reactive({})
-const editFormRef = ref()
-const originalRecordForModal = ref(null) // Renamed to avoid conflict
+let newRowCounter = 0;
 
 const columnWidths = ref({})
 const searchText = ref('')
@@ -160,7 +126,7 @@ const originalCellValue = ref('');
 const editingInputRef = ref(null);
 const pendingChanges = reactive({}); // { [recordKey]: { [columnKey]: newValue } }
 
-const hasPendingChanges = computed(() => Object.keys(pendingChanges).length > 0);
+const hasPendingChanges = computed(() => Object.keys(pendingChanges).length > 0 || tableData.value.some(r => r.__isNew));
 
 const PRIMARY_KEY_FLAG = 2; // From mysql2/lib/constants/field_flags
 const primaryKey = computed(() => {
@@ -181,28 +147,39 @@ const filteredData = computed(() => {
   )
 })
 
+const getRowKey = (record) => {
+  if (record.__isNew) {
+    return record.__tempId;
+  }
+  return primaryKey.value ? record[primaryKey.value] : undefined;
+};
+
 const handleResizeColumn = (w, col) => {
   columnWidths.value[col.key] = w
 }
 
 const rowClassName = (record) => {
-  if (!primaryKey.value) return '';
-  const key = record[primaryKey.value];
-  return selectedRowKeys.value.includes(key) ? 'row-selected' : '';
+  const key = getRowKey(record);
+  let className = key && selectedRowKeys.value.includes(key) ? 'row-selected' : '';
+  if (record.__isNew) {
+    className += ' new-row';
+  }
+  return className;
 };
 
 const customRow = (record) => {
   return {
     onClick: (event) => {
-      if (!primaryKey.value) return;
+      const key = getRowKey(record);
+      if (!key) return;
+
       if (event.target.closest('.cell-content')) {
         return;
       }
 
-      const key = record[primaryKey.value];
       const currentKeys = [...selectedRowKeys.value];
       const data = filteredData.value;
-      const allKeys = data.map(r => r[primaryKey.value]);
+      const allKeys = data.map(r => getRowKey(r));
 
       if (event.shiftKey && lastSelectedRowKey.value) {
         const lastIndex = allKeys.indexOf(lastSelectedRowKey.value);
@@ -260,14 +237,17 @@ const columns = computed(() => {
 
 // --- Inline Edit Methods ---
 const isEditing = (record, column) => {
-  if (!primaryKey.value) return false;
-  const recordKey = record[primaryKey.value];
+  const recordKey = getRowKey(record);
+  if (!recordKey) return false;
   return editingCellKey.value === `${recordKey}-${column.key}`;
 };
 
 const isCellDirty = (record, column) => {
-  if (!primaryKey.value) return false;
-  const recordKey = record[primaryKey.value];
+  const recordKey = getRowKey(record);
+  if (!recordKey) return false;
+  if (record.__isNew) {
+    return record[column.key] !== null; // For new rows, any value is a change
+  }
   return pendingChanges[recordKey]?.[column.key] !== undefined;
 }
 
@@ -275,11 +255,11 @@ const setEditingCell = (record, column) => {
   if (editingCellKey.value) {
     stageChange();
   }
-  if (!primaryKey.value) {
-    message.error('无法编辑：当前表没有检测到主键。');
+  const recordKey = getRowKey(record);
+  if (!recordKey) {
+     message.error('无法编辑：无法确定行标识。');
     return;
   }
-  const recordKey = record[primaryKey.value];
   editingCellKey.value = `${recordKey}-${column.key}`;
   editingValue.value = record[column.key];
   originalCellValue.value = record[column.key];
@@ -289,24 +269,54 @@ const setEditingCell = (record, column) => {
   });
 };
 
+const validateCellValue = (value, field) => {
+  if (value === null || value === '') return { isValid: true }; // Allow null/empty
+
+  const fieldType = fields.value.find(f => f.name === field.name)?.type.toLowerCase() || '';
+
+  if (fieldType.includes('int') || fieldType.includes('decimal') || fieldType.includes('float') || fieldType.includes('double') || fieldType.includes('bit')) {
+    if (isNaN(Number(value))) {
+      return { isValid: false, message: `字段 ${field.name} 需要一个有效的数值。` };
+    }
+  }
+  // Can add more validators for DATE, DATETIME etc. here
+
+  return { isValid: true };
+};
+
 const stageChange = () => {
   if (editingCellKey.value === null) return;
 
   const keyToStage = editingCellKey.value;
   const newValue = editingValue.value;
   const originalValue = originalCellValue.value;
+  const [recordKey, columnKey] = keyToStage.split('-');
+
+  const column = columns.value.find(c => c.key === columnKey);
+  if (column) {
+    const validation = validateCellValue(newValue, column);
+    if (!validation.isValid) {
+      message.error(validation.message);
+      editingInputRef.value?.focus(); // Keep focus for user to correct
+      return;
+    }
+  }
+
   editingCellKey.value = null;
 
   if (newValue !== originalValue) {
-    const [recordKey, columnKey] = keyToStage.split('-');
-    const record = tableData.value.find(r => String(r[primaryKey.value]) === recordKey);
+    const record = tableData.value.find(r => String(getRowKey(r)) === recordKey);
 
     if (record) {
-      if (!pendingChanges[recordKey]) {
-        pendingChanges[recordKey] = {};
+      if (record.__isNew) {
+        record[columnKey] = newValue;
+      } else {
+        if (!pendingChanges[recordKey]) {
+          pendingChanges[recordKey] = {};
+        }
+        pendingChanges[recordKey][columnKey] = newValue;
+        record[columnKey] = newValue;
       }
-      pendingChanges[recordKey][columnKey] = newValue;
-      record[columnKey] = newValue;
     }
   }
 };
@@ -316,22 +326,36 @@ const cancelCellEdit = () => {
 };
 
 const submitChanges = async () => {
-  stageChange();
-  const promises = [];
+  stageChange(); // Stage any pending cell edit
+
+  const newRows = tableData.value.filter(r => r.__isNew);
+  const updatePromises = [];
+
+  // Handle updates for existing rows
   for (const recordKey in pendingChanges) {
+    if (newRows.some(nr => getRowKey(nr) === recordKey)) {
+      continue; // Skip new rows, they will be handled by INSERT
+    }
     const originalRecord = originalTableData.value.find(r => String(r[primaryKey.value]) === recordKey);
     if (originalRecord) {
       const changedData = pendingChanges[recordKey];
       const whereClause = buildWhereClause(originalRecord);
-      promises.push(queryStore.updateData(props.connectionId, props.database, props.table, changedData, whereClause));
+      updatePromises.push(queryStore.updateData(props.connectionId, props.database, props.table, changedData, whereClause));
     }
   }
 
+  // Handle inserts for new rows
+  const insertPromises = newRows.map(newRow => {
+    const rowData = { ...newRow };
+    delete rowData.__isNew;
+    delete rowData.__tempId;
+    return queryStore.insertData(props.connectionId, props.database, props.table, rowData);
+  });
+
   try {
-    await Promise.all(promises);
+    await Promise.all([...insertPromises, ...updatePromises]);
     message.success('所有更改已提交');
-    Object.keys(pendingChanges).forEach(key => delete pendingChanges[key]);
-    originalTableData.value = JSON.parse(JSON.stringify(tableData.value));
+    loadData(); // Reload data to get a clean state
   } catch (error) {
     message.error(`提交部分或全部更改失败: ${error.message}`);
   }
@@ -378,18 +402,13 @@ const formatCellValue = (value) => {
   return String(value)
 }
 
-const isTextField = (field) => {
-  const type = (typeof field.type === 'string') ? field.type.toLowerCase() : ''
-  return type.includes('text') || type.includes('blob') || type.includes('json')
-}
-
 const handleAdd = () => {
-  editMode.value = 'add'
-  originalRecordForModal.value = null
-  Object.keys(editForm).forEach(key => delete editForm[key])
-  fields.value.forEach(field => { editForm[field.name] = null })
-  showEditDialog.value = true
-}
+  const newRow = { __isNew: true, __tempId: `new_${newRowCounter++}` };
+  fields.value.forEach(field => {
+    newRow[field.name] = null;
+  });
+  tableData.value.push(newRow);
+};
 
 const handleBatchDelete = async () => {
   if (!primaryKey.value) {
@@ -405,28 +424,13 @@ const handleBatchDelete = async () => {
       isBatchDeleting.value = true
       try {
         const pkValues = selectedRowKeys.value.map(key => typeof key === 'string' ? `'${key}'` : key).join(',')
-        const whereClause = `"${primaryKey.value}" IN (${pkValues})`
+        const whereClause = `\`${primaryKey.value}\` IN (${pkValues})`
         await queryStore.deleteData(props.connectionId, props.database, props.table, whereClause)
         message.success('批量删除成功')
         loadData()
       } catch (error) { message.error(`批量删除失败: ${error.message}`) } finally { isBatchDeleting.value = false }
     }
   })
-}
-
-const saveData = async () => {
-  try {
-    if (editMode.value === 'add') {
-      await queryStore.insertData(props.connectionId, props.database, props.table, editForm)
-      message.success('新增成功')
-    } else {
-      const whereClause = buildWhereClause(originalRecordForModal.value)
-      await queryStore.updateData(props.connectionId, props.database, props.table, editForm, whereClause)
-      message.success('更新成功')
-    }
-    showEditDialog.value = false
-    loadData()
-  } catch (error) { message.error(`保存失败: ${error.message}`) }
 }
 
 const buildWhereClause = (record) => {
@@ -469,6 +473,10 @@ watch(() => [props.connectionId, props.database, props.table], () => {
 
 :deep(.row-selected > td) {
   background-color: #e6f7ff !important;
+}
+
+:deep(.new-row > td) {
+  background-color: #f6ffed !important;
 }
 
 :deep(.ant-table-bordered .ant-table-tbody > tr > td) {

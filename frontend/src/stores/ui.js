@@ -153,6 +153,16 @@ export const useUIStore = defineStore('ui', {
       if (this.activeMainTab === tabKey) {
         this.activeMainTab = 'objects';
       }
+    },
+
+    closeTabsForConnection(connectionId) {
+      this.dataTabs = this.dataTabs.filter(tab => tab.connectionId !== connectionId);
+      if (this.activeMainTab !== 'objects' && this.activeMainTab !== 'query') {
+        const activeTabExists = this.dataTabs.some(tab => tab.name === this.activeMainTab);
+        if (!activeTabExists) {
+          this.activeMainTab = 'objects';
+        }
+      }
     }
   }
 })

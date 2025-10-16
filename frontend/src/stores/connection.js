@@ -1,5 +1,6 @@
-import { defineStore } from 'pinia'
-import { connectionAPI } from '@/api'
+import { defineStore } from 'pinia';
+import { connectionAPI } from '@/api';
+import { useUIStore } from './ui';
 
 export const useConnectionStore = defineStore('connection', {
   state: () => ({
@@ -126,6 +127,7 @@ export const useConnectionStore = defineStore('connection', {
     },
 
     async closeConnection(connectionId) {
+      const uiStore = useUIStore();
       try {
         await connectionAPI.close(connectionId);
         
@@ -138,6 +140,8 @@ export const useConnectionStore = defineStore('connection', {
         if (this.activeConnectionId === connectionId) {
           this.activeConnectionId = null;
         }
+
+        uiStore.closeTabsForConnection(connectionId);
       } catch (error) {
         this.error = error.message;
         throw error;
