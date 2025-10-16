@@ -48,16 +48,25 @@ import {
 } from '@ant-design/icons-vue';
 import ConnectionDialog from './ConnectionDialog.vue';
 import { useUIStore } from '@/stores/ui';
+import { useConnectionStore } from '@/stores/connection';
 import { message } from 'ant-design-vue';
 
 const uiStore = useUIStore();
+const connectionStore = useConnectionStore();
 const showConnectionDialog = ref(false);
 
 const handleMenuClick = (action) => {
   if (action === 'new-connection') {
     showConnectionDialog.value = true;
   } else if (action === 'new-query') {
-    uiStore.setActiveMainTab('query');
+    if (connectionStore.activeConnection) {
+      uiStore.openQueryTab({
+        connectionId: connectionStore.activeConnectionId,
+        dbName: connectionStore.activeDatabaseName
+      });
+    } else {
+      message.info('请先选择一个数据库连接');
+    }
   } else if (['tables', 'views', 'procedures'].includes(action)) {
     uiStore.setObjectListFilter(action);
     uiStore.setActiveMainTab('objects');

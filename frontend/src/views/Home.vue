@@ -63,16 +63,12 @@
             :active-key="uiStore.activeMainTab"
             @update:active-key="uiStore.setActiveMainTab"
             type="editable-card"
-            @edit="(key, action) => action === 'remove' && uiStore.closeDataTab(key)"
+            @edit="(key, action) => action === 'remove' && uiStore.closeTab(key)"
             hide-add
             style="width: 100%; display: flex; flex-direction: column"
           >
             <a-tab-pane key="objects" tab="对象" :closable="false">
               <ObjectList />
-            </a-tab-pane>
-
-            <a-tab-pane key="query" tab="SQL查询" :closable="false">
-              <SqlEditor ref="sqlEditorRef" />
             </a-tab-pane>
 
             <a-tab-pane
@@ -81,6 +77,12 @@
               :tab="tab.label"
               :closable="true"
             >
+              <SqlEditor
+                v-if="tab.type === 'query'"
+                :initial-sql="tab.sql"
+                :connection-id="tab.connectionId"
+                :database="tab.database"
+              />
               <TableDataView
                 v-if="tab.type === 'data'"
                 :connection-id="tab.connectionId"
