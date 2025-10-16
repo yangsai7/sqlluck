@@ -429,7 +429,7 @@ const handleContextCommand = async (command, dataRef) => {
       message.success(`对象 "${dataRef.table || dataRef.view}" 已复制`);
       break;
     case "pasteTable":
-      await pasteTable(dataRef);
+      await uiStore.paste({ connectionId: dataRef.connectionId, dbName: dataRef.database });
       break;
     case "export":
       tableToExport.value = dataRef;
@@ -498,7 +498,9 @@ const confirmNewDatabase = async (connectionNode) => {
         return Promise.reject("数据库名称不能为空");
       }
       try {
-        let sql = `CREATE DATABASE \`${newDbInfo.name.trim()}\``;
+        let sql = `CREATE DATABASE 
+${newDbInfo.name.trim()}
+`;
         if (newDbInfo.charset) {
             sql += ` CHARACTER SET ${newDbInfo.charset}`;
         }
@@ -559,56 +561,13 @@ const confirmRenameTable = (tableNode) => {
   });
 };
 
-const pasteTable = async (dbNode) => {
-  const sourceObject = uiStore.clipboard.data;
-  const newName = `${sourceObject.table || sourceObject.view}_copy`;
-  const newDb = dbNode.database;
-
-  const hide = message.loading(`正在粘贴对象到 "${newDb}"...`, 0);
-  try {
-    // ✅ 修复模板字符串中的反引号问题
-    const ddlSql = `SHOW CREATE TABLE \`${sourceObject.database}\`.\`${
-      sourceObject.table || sourceObject.view
-    }\``;
-    const ddlResult = await queryStore.executeQuery(
-      sourceObject.connectionId,
-      sourceObject.database,
-      ddlSql
-    );
-
-    if (!ddlResult.success || !ddlResult.data.length)
-      throw new Error("获取原对象DDL失败");
-
-    let createSql = ddlResult.data[0]["Create Table"];
-
-    // ✅ 替换表名部分时也要转义反引号
-    createSql = createSql.replace(
-      new RegExp(`CREATE TABLE \`${sourceObject.table || sourceObject.view}\``),
-      `CREATE TABLE \`${newDb}\`.\`${newName}\``
-    );
-
-    await queryStore.executeQuery(sourceObject.connectionId, newDb, createSql);
-
-    // ✅ 修复 SQL 拼接语法
-    const insertSql = `INSERT INTO \`${newDb}\`.\`${newName}\` SELECT * FROM \`${
-      sourceObject.database
-    }\`.\`${sourceObject.table || sourceObject.view}\``;
-    await queryStore.executeQuery(sourceObject.connectionId, newDb, insertSql);
-
-    hide();
-    message.success("粘贴成功！");
-    await connectionStore.setActiveDatabase(newDb, true); // Force refresh
-  } catch (error) {
-    hide();
-    message.error(`粘贴失败: ${error.message}`);
-  }
-};
-
 const showDDL = async (node) => {
   try {
-    const sql = `SHOW CREATE ${node.type.toUpperCase()} \`${
-      node.database
-    }\`.\`${node.table || node.view}\``;
+    const sql = `SHOW CREATE ${node.type.toUpperCase()} 
+${node.database}
+.
+${node.table || node.view}
+`;
     const result = await queryStore.executeQuery(node.connectionId, node.database, sql);
     if (result.success && result.data.length > 0) {
       ddlContent.value =
@@ -632,13 +591,17 @@ const copyDDL = async () => {
 const confirmClearTable = (node) => {
   Modal.confirm({
     title: `确认清空表`,
-    content: `您确定要清空表 \"${node.database}.${node.table}\" 中的所有数据吗？此操作不可恢复。`,
+    content: `您确定要清空表 "${node.database}.${node.table}" 中的所有数据吗？此操作不可恢复。`,
     okText: "确认清空",
     okType: "danger",
     cancelText: "取消",
     onOk: async () => {
       try {
-        const sql = `DELETE FROM \`${node.database}\`.\`${node.table}\``;
+        const sql = `DELETE FROM 
+${node.database}
+.
+${node.table}
+`;
         await queryStore.executeQuery(node.connectionId, node.database, sql);
         message.success("表已清空");
         await connectionStore.setActiveDatabase(node.database, true); // Force refresh
@@ -652,13 +615,17 @@ const confirmClearTable = (node) => {
 const confirmTruncateTable = (node) => {
   Modal.confirm({
     title: `确认截断表`,
-    content: `您确定要截断表 \"${node.database}.${node.table}\" 吗？此操作会重置自增计数器，且不可恢复。`,
+    content: `您确定要截断表 "${node.database}.${node.table}" 吗？此操作会重置自增计数器，且不可恢复。`,
     okText: "确认截断",
     okType: "danger",
     cancelText: "取消",
     onOk: async () => {
       try {
-        const sql = `TRUNCATE TABLE \`${node.database}\`.\`${node.table}\``;
+        const sql = `TRUNCATE TABLE 
+${node.database}
+.
+${node.table}
+`;
         await queryStore.executeQuery(node.connectionId, node.database, sql);
         message.success("表已截断");
         await connectionStore.setActiveDatabase(node.database, true); // Force refresh
@@ -672,17 +639,17 @@ const confirmTruncateTable = (node) => {
 const confirmDeleteTable = (node) => {
   Modal.confirm({
     title: `确认删除${node.type === "view" ? "视图" : "表"}`,
-    content: `您确定要删除 "${node.database}.${
-      node.table || node.view
-    }" 吗？此操作不可恢复。`,
+    content: `您确定要删除 "${node.database}.${node.table || node.view}" 吗？此操作不可恢复。`,
     okText: "确认删除",
     okType: "danger",
     cancelText: "取消",
     onOk: async () => {
       try {
-        const sql = `DROP ${node.type.toUpperCase()} \`${node.database}\`.\`${
-          node.table || node.view
-        }\``;
+        const sql = `DROP ${node.type.toUpperCase()} 
+${node.database}
+.
+${node.table || node.view}
+`;
         await queryStore.executeQuery(node.connectionId, node.database, sql);
         message.success("删除成功");
         await connectionStore.setActiveDatabase(node.database, true); // Force refresh
@@ -774,4 +741,3 @@ onMounted(() => {
   font-family: "Monaco", "Menlo", "Ubuntu Mono", monospace;
 }
 </style>
-

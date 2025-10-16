@@ -350,6 +350,12 @@ const loadTableData = async () => {
 
     if (createSqlRes.success) {
       const createSql = createSqlRes.data[0]["Create Table"];
+
+      // Clear existing index data before loading new data
+      indexesData.value = [];
+      originalIndexesData.value = [];
+      indexIdCounter = 0;
+
       const indexRegex = /(?:(PRIMARY|UNIQUE|FULLTEXT|SPATIAL)?\s*KEY|PRIMARY\s*KEY)\s*(?:`?([^`\s(]+)`?)?\s*\(([^)]+)\)/g;
       let match;
       while ((match = indexRegex.exec(createSql)) !== null) {
@@ -488,7 +494,7 @@ const previewSql = computed(() => {
         if (finalIdx.type === 'PRIMARY') {
           alterClauses.push(`ADD PRIMARY KEY (${cols})`);
         } else {
-          alterClauses.push(`ADD ${finalIdx.type} KEY \`${finalIdx.name}\` (${cols})`);
+          alterClauses.push(`ADD ${finalIdx.type} \`${finalIdx.name}\` (${cols})`);
         }
       }
     });
@@ -550,7 +556,7 @@ const previewSql = computed(() => {
       return (
         "  " +
         idx.type +
-        " KEY `" +
+        " `" +
         idx.name +
         "` (" +
         cols +

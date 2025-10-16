@@ -14,6 +14,21 @@
       "clientKeyPath": "",
       "connectTimeout": 5000,
       "timezone": "+00:00"
+    },
+    {
+      "id": "e0030cec-5bc7-4760-bc32-7982c2739caf",
+      "name": "生产环境",
+      "host": "192.168.1.126",
+      "port": 3308,
+      "user": "root",
+      "password": "fdc84ed5-d960-482d-83fa-fe8f528a1ab0",
+      "database": "",
+      "useSSL": false,
+      "caPath": "",
+      "clientCertPath": "",
+      "clientKeyPath": "",
+      "connectTimeout": 5000,
+      "timezone": "+00:00"
     }
   ]
 }

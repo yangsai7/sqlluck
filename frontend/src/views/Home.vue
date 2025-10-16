@@ -83,7 +83,7 @@
             >
               <TableDataView
                 v-if="tab.type === 'data'"
-                :connection-id="connectionStore.activeConnectionId"
+                :connection-id="tab.connectionId"
                 :database="tab.database"
                 :table="tab.table"
               />
@@ -91,7 +91,7 @@
               <TableEditor
                 v-if="tab.type === 'structure' || tab.type === 'new_table'"
                 :mode="tab.type === 'new_table' ? 'create' : 'edit'"
-                :connection-id="connectionStore.activeConnectionId"
+                :connection-id="tab.connectionId"
                 :database="tab.database"
                 :table="tab.table"
               />
@@ -140,11 +140,11 @@ const showImportExportDialog = ref(false)
 // 处理树节点点击
 const handleNodeClick = (data) => {
   if (data.action === 'newTable') {
-    uiStore.openNewTableTab({ database: data.database })
+    uiStore.openNewTableTab({ connectionId: data.connectionId, database: data.database })
   } else if (data.type === 'table') {
     selectedTable.value = data.table
     const type = data.action === 'viewStructure' ? 'structure' : 'data';
-    uiStore.openDataTab({ table: data.table, database: data.database, type });
+    uiStore.openDataTab({ connectionId: data.connectionId, table: data.table, database: data.database, type });
   }
 }
 

@@ -65,11 +65,11 @@ const handleExport = async () => {
     if (exportOptions.format === 'sql') {
       filename += '.sql'
       if (exportOptions.sql.includeStructure) {
-        const ddlResult = await queryStore.executeQuery(props.tableInfo.connectionId, `SHOW CREATE TABLE \`${props.tableInfo.database}\`.\`${props.tableInfo.table}\``)
+        const ddlResult = await queryStore.executeQuery(props.tableInfo.connectionId, props.tableInfo.database, `SHOW CREATE TABLE \`${props.tableInfo.database}\`.\`${props.tableInfo.table}\``)
         content += ddlResult.data[0]['Create Table'] + ';\n\n'
       }
       if (exportOptions.sql.includeData) {
-        const dataResult = await queryStore.executeQuery(props.tableInfo.connectionId, `SELECT * FROM \`${props.tableInfo.database}\`.\`${props.tableInfo.table}\``)
+        const dataResult = await queryStore.executeQuery(props.tableInfo.connectionId, props.tableInfo.database, `SELECT * FROM \`${props.tableInfo.database}\`.\`${props.tableInfo.table}\``)
         if (dataResult.data.length > 0) {
           const columns = Object.keys(dataResult.data[0])
           const insertTpl = `INSERT INTO \`${props.tableInfo.table}\` (\`${columns.join('\`, \`')}\`) VALUES\n`
@@ -84,7 +84,7 @@ const handleExport = async () => {
       }
     } else if (exportOptions.format === 'csv') {
       filename += '.csv'
-      const dataResult = await queryStore.executeQuery(props.tableInfo.connectionId, `SELECT * FROM \`${props.tableInfo.database}\`.\`${props.tableInfo.table}\``)
+      const dataResult = await queryStore.executeQuery(props.tableInfo.connectionId, props.tableInfo.database, `SELECT * FROM \`${props.tableInfo.database}\`.\`${props.tableInfo.table}\``)
       if (dataResult.data.length > 0) {
         const columns = Object.keys(dataResult.data[0])
         content += columns.join(',') + '\n'

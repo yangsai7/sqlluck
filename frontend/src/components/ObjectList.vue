@@ -1,5 +1,5 @@
 <template>
-  <div class="object-list-view" tabindex="0" @keydown.delete.prevent="handleDeleteKey">
+  <div class="object-list-view" tabindex="0" @keydown.delete.prevent="handleDeleteKey" @keydown.ctrl.c.prevent="handleCopy" @keydown.meta.c.prevent="handleCopy" @keydown.ctrl.v.prevent="handlePaste" @keydown.meta.v.prevent="handlePaste">
     <div v-if="!targetDB" class="no-selection">
       <a-empty description="在左侧双击一个数据库以查看其对象" />
     </div>
@@ -12,7 +12,7 @@
         size="small"
         row-key="name"
         :custom-row="customRow"
-        :row-class-name="(record, _index) => record.name === selectedRowKey ? 'row-selected' : ''"
+        :row-class-name="(record, _index) => selectedRowKeys.includes(record.name) ? 'row-selected' : ''"
       >
         <template #bodyCell="{ column, record }">
           <template v-if="column.key === 'name'">
@@ -23,21 +23,24 @@
               </div>
               <template #overlay>
                 <a-menu @click="({ key }) => handleContextCommand(key, record)">
-                  <a-menu-item key="viewData">
+                  <a-menu-item key="viewData" :disabled="selectedRowKeys.length > 1">
                     <template #icon><TableOutlined /></template> 查看数据
                   </a-menu-item>
-                  <a-menu-item key="viewStructure">
+                  <a-menu-item key="viewStructure" :disabled="selectedRowKeys.length > 1">
                     <template #icon><ApartmentOutlined /></template> 查看结构
                   </a-menu-item>
-                  <a-menu-item key="viewDDL">
+                  <a-menu-item key="viewDDL" :disabled="selectedRowKeys.length > 1">
                     <template #icon><FileTextOutlined /></template> 查看DDL
                   </a-menu-item>
-                  <a-menu-item key="renameTable">
+                  <a-menu-item key="renameTable" :disabled="selectedRowKeys.length > 1">
                     <template #icon><EditOutlined /></template> 重命名
                   </a-menu-item>
                   <a-menu-divider />
                   <a-menu-item key="copyTable">
                     <template #icon><CopyOutlined /></template> 复制
+                  </a-menu-item>
+                  <a-menu-item key="pasteTable" :disabled="!uiStore.clipboard || uiStore.clipboard.type !== 'table'">
+                    <template #icon><SnippetsOutlined /></template> 粘贴
                   </a-menu-item>
                   <a-menu-item key="export">
                     <template #icon><ExportOutlined /></template> 导出
@@ -124,6 +127,7 @@ import {
   ClearOutlined,
   StopOutlined,
   DeleteOutlined,
+  SnippetsOutlined,
 } from '@ant-design/icons-vue';
 import ExportDialog from './ExportDialog.vue';
 
@@ -132,7 +136,8 @@ const connectionStore = useConnectionStore();
 const queryStore = useQueryStore();
 
 const targetDB = computed(() => uiStore.objectsViewTarget);
-const selectedRowKey = ref(null);
+const selectedRowKeys = ref([]);
+let lastSelectedRowKey = null;
 
 const tables = computed(() => {
   if (!targetDB.value) return [];
@@ -162,8 +167,30 @@ const formatBytes = (bytes) => {
 
 const customRow = (record) => {
   return {
-    onClick: () => {
-      selectedRowKey.value = record.name;
+    onClick: (event) => {
+      const key = record.name;
+      if (event.ctrlKey || event.metaKey) {
+        if (selectedRowKeys.value.includes(key)) {
+          selectedRowKeys.value = selectedRowKeys.value.filter(k => k !== key);
+        } else {
+          selectedRowKeys.value.push(key);
+        }
+      } else if (event.shiftKey) {
+        const lastIndex = tables.value.findIndex(t => t.name === lastSelectedRowKey);
+        const currentIndex = tables.value.findIndex(t => t.name === key);
+        if (lastIndex !== -1) {
+          const start = Math.min(lastIndex, currentIndex);
+          const end = Math.max(lastIndex, currentIndex);
+          const rangeKeys = tables.value.slice(start, end + 1).map(t => t.name);
+          const newKeys = [...new Set([...selectedRowKeys.value, ...rangeKeys])];
+          selectedRowKeys.value = newKeys;
+        } else {
+          selectedRowKeys.value = [key];
+        }
+      } else {
+        selectedRowKeys.value = [key];
+      }
+      lastSelectedRowKey = key;
     },
     onDblclick: () => {
       uiStore.openDataTab({
@@ -181,215 +208,339 @@ const ddlContent = ref("");
 const exportDialogVisible = ref(false);
 const tableToExport = ref(null);
 
+const getSelectedNodes = (clickedRecord) => {
+  if (selectedRowKeys.value.length <= 1 || !selectedRowKeys.value.includes(clickedRecord.name)) {
+    return [{
+      type: 'table',
+      table: clickedRecord.name,
+      database: targetDB.value.dbName,
+      connectionId: targetDB.value.connectionId,
+      ...clickedRecord
+    }];
+  }
+  return selectedRowKeys.value.map(key => {
+    const record = tables.value.find(t => t.name === key);
+    return {
+      type: 'table',
+      table: record.name,
+      database: targetDB.value.dbName,
+      connectionId: targetDB.value.connectionId,
+      ...record
+    };
+  });
+};
+
 const handleContextCommand = async (command, record) => {
-  const node = {
-    type: 'table',
-    table: record.name,
-    database: targetDB.value.dbName,
-    connectionId: targetDB.value.connectionId,
-    ...record
-  };
+  const nodes = getSelectedNodes(record);
+  const firstNode = nodes[0];
 
-  // Ensure the connection is active before performing any other action
-  if (node.connectionId && node.connectionId !== connectionStore.activeConnectionId) {
-    await connectionStore.setActiveConnection(node.connectionId);
+  if (firstNode.connectionId && firstNode.connectionId !== connectionStore.activeConnectionId) {
+    await connectionStore.setActiveConnection(firstNode.connectionId);
   }
-  
-  if (node.database && node.database !== connectionStore.activeDatabaseName) {
-      await connectionStore.setActiveDatabase(node.database);
+  if (firstNode.database && firstNode.database !== connectionStore.activeDatabaseName) {
+    await connectionStore.setActiveDatabase(firstNode.database);
   }
-
 
   switch (command) {
     case "viewData":
-      uiStore.openDataTab({ table: node.table, database: node.database, type: 'data' });
-      break;
     case "viewStructure":
-      uiStore.openDataTab({ table: node.table, database: node.database, type: 'structure' });
-      break;
     case "viewDDL":
-      await showDDL(node);
-      break;
     case "renameTable":
-      confirmRenameTable(node);
+      if (nodes.length > 1) {
+        message.info('This action cannot be performed on multiple items.');
+        return;
+      }
+      // Fallthrough for single item
+      if (command === 'viewData') uiStore.openDataTab({ table: firstNode.table, database: firstNode.database, type: 'data' });
+      if (command === 'viewStructure') uiStore.openDataTab({ table: firstNode.table, database: firstNode.database, type: 'structure' });
+      if (command === 'viewDDL') await showDDL(firstNode);
+      if (command === 'renameTable') confirmRenameTable(firstNode);
       break;
     case "deleteTable":
-      confirmDeleteTable(node);
+      confirmDeleteTable(nodes);
       break;
     case "clearTable":
-      confirmClearTable(node);
+      confirmClearTable(nodes);
       break;
     case "truncateTable":
-      confirmTruncateTable(node);
+      confirmTruncateTable(nodes);
       break;
     case "copyTable":
-      uiStore.copy("table", {
-          database: node.database,
-          table: node.table,
-          connectionId: node.connectionId,
-          type: 'table'
-      });
-      message.success(`对象 "${node.table}" 已复制`);
+      handleCopy();
+      break;
+    case "pasteTable":
+      handlePaste();
       break;
     case "export":
-      tableToExport.value = node;
+      // For now, export still works on a single table from context menu
+      tableToExport.value = firstNode;
       exportDialogVisible.value = true;
       break;
   }
 };
 
+const handleCopy = () => {
+  if (selectedRowKeys.value.length > 0) {
+    const selectedRecords = tables.value.filter(t => selectedRowKeys.value.includes(t.name));
+    const itemsToCopy = selectedRecords.map(record => ({
+      database: targetDB.value.dbName,
+      table: record.name,
+      connectionId: targetDB.value.connectionId,
+      type: 'table'
+    }));
+    uiStore.copy("table", itemsToCopy);
+    message.success(`已复制 ${itemsToCopy.length} 个对象`);
+  }
+};
+
+const handlePaste = () => {
+  if (targetDB.value) {
+    uiStore.paste(targetDB.value);
+  }
+};
+
 const handleDeleteKey = () => {
-  if (selectedRowKey.value) {
-    const selectedRecord = tables.value.find(t => t.name === selectedRowKey.value);
-    if (selectedRecord) {
-      const node = {
-        type: 'table',
-        table: selectedRecord.name,
-        database: targetDB.value.dbName,
-        connectionId: targetDB.value.connectionId,
-        ...selectedRecord
-      };
-      confirmDeleteTable(node);
-    }
+  if (selectedRowKeys.value.length > 0) {
+    const selectedRecords = tables.value.filter(t => selectedRowKeys.value.includes(t.name));
+    const nodes = selectedRecords.map(record => ({
+      type: 'table',
+      table: record.name,
+      database: targetDB.value.dbName,
+      connectionId: targetDB.value.connectionId,
+      ...record
+    }));
+    confirmDeleteTable(nodes);
   }
 };
 
 const showDDL = async (node) => {
+
   try {
-    const sql = `SHOW CREATE TABLE 
-${node.database}
-.
-${node.table}
-`;
+
+    const sql = `SHOW CREATE TABLE \`${node.database}\`.\`${node.table}\``;
+
     const result = await queryStore.executeQuery(node.connectionId, node.database, sql);
+
     if (result.success && result.data.length > 0) {
+
       ddlContent.value = result.data[0]["Create Table"];
+
       ddlVisible.value = true;
+
     } else {
+
       throw new Error(result.error || '未能获取DDL');
+
     }
+
   } catch (error) {
+
     message.error(`获取DDL失败: ${error.message}`);
+
   }
+
 };
+
+
 
 const copyDDL = async () => {
+
   try {
+
     await navigator.clipboard.writeText(ddlContent.value);
+
     message.success("复制成功");
+
   } catch (error) {
+
     message.error("复制失败");
+
   }
+
 };
+
+
 
 const confirmRenameTable = (tableNode) => {
+
   let newTableName = tableNode.table;
+
   Modal.confirm({
+
     title: `重命名 "${newTableName}"`, 
+
     content: h("div", { style: "margin-top: 1em;" }, [
+
       h("p", "请输入新的名称:"),
+
       h(Input, {
+
         defaultValue: newTableName,
+
         onChange: (e) => {
+
           newTableName = e.target.value;
+
         },
+
       }),
+
     ]),
+
     onOk: async () => {
+
       if (!newTableName || newTableName.trim() === "") {
+
         message.error("名称不能为空");
+
         return Promise.reject("名称不能为空");
+
       }
+
       if (newTableName === tableNode.table) return;
+
       try {
-        const sql = `RENAME TABLE 
-${tableNode.database}
-.
-${tableNode.table}
- TO 
-${tableNode.database}
-.
-${newTableName}
-`;
+
+        const sql = `RENAME TABLE \`${tableNode.database}\`.\`${tableNode.table}\` TO \`${tableNode.database}\`.\`${newTableName}\``;
+
         await queryStore.executeQuery(tableNode.connectionId, tableNode.database, sql);
+
         message.success("重命名成功");
+
         await connectionStore.setActiveDatabase(tableNode.database, true); // Force refresh
+
       } catch (error) {
+
         message.error(`重命名失败: ${error.message}`);
+
         return Promise.reject(error);
+
       }
+
     },
+
   });
+
 };
 
-const confirmClearTable = (node) => {
+
+
+const confirmBulkOperation = (nodes, operation, { title, content, okText }) => {
+
   Modal.confirm({
-    title: `确认清空表`,
-    content: `您确定要清空表 "${node.database}.${node.table}" 中的所有数据吗？此操作不可恢复。`,
-    okText: "确认清空",
+
+    title: `${title} (${nodes.length} 个对象)`,
+
+    content: h('div', null, [
+
+      h('p', `${content}:`),
+
+      h('ul', { style: 'margin-top: 1em; max-height: 150px; overflow-y: auto;' }, 
+
+        nodes.map(n => h('li', `${n.database}.${n.table}`)))
+
+    ]),
+
+    okText: okText,
+
     okType: "danger",
+
     cancelText: "取消",
+
     onOk: async () => {
+
       try {
-        const sql = `DELETE FROM 
-${node.database}
-.
-${node.table}
-`;
-        await queryStore.executeQuery(node.connectionId, node.database, sql);
-        await connectionStore.setActiveDatabase(node.database, true); // Force refresh
+
+        for (const node of nodes) {
+
+          const sql = operation(node);
+
+          await queryStore.executeQuery(node.connectionId, node.database, sql);
+
+        }
+
+        message.success(`${title}成功`);
+
+        await connectionStore.setActiveDatabase(nodes[0].database, true); // Force refresh
+
       } catch (error) {
-        message.error(`清空失败: ${error.message}`);
+
+        message.error(`${title}失败: ${error.message}`);
+
+        return Promise.reject(error);
+
       }
+
     },
+
   });
+
 };
 
-const confirmTruncateTable = (node) => {
-  Modal.confirm({
-    title: `确认截断表`,
-    content: `您确定要截断表 "${node.database}.${node.table}" 吗？此操作会重置自增计数器，且不可恢复。`,
-    okText: "确认截断",
-    okType: "danger",
-    cancelText: "取消",
-    onOk: async () => {
-      try {
-        const sql = `TRUNCATE TABLE 
-${node.database}
-.
-${node.table}
-`;
-        await queryStore.executeQuery(node.connectionId, node.database, sql);
-        await connectionStore.setActiveDatabase(node.database, true); // Force refresh
-      } catch (error) {
-        message.error(`截断失败: ${error.message}`);
-      }
-    },
-  });
+
+
+const confirmClearTable = (nodes) => {
+
+  confirmBulkOperation(nodes, 
+
+    (n) => `DELETE FROM \`${n.database}\`.\`${n.table}\``,
+
+    {
+
+      title: '确认清空表',
+
+      content: '您确定要清空以下表中的所有数据吗？此操作不可恢复。',
+
+      okText: '确认清空'
+
+    }
+
+  );
+
 };
 
-const confirmDeleteTable = (node) => {
-  Modal.confirm({
-    title: `确认删除表`,
-    content: `您确定要删除 "${node.database}.${node.table}" 吗？此操作不可恢复。`,
-    okText: "确认删除",
-    okType: "danger",
-    cancelText: "取消",
-    onOk: async () => {
-      try {
-        const sql = `DROP TABLE 
-${node.database}
-.
-${node.table}
-`;
-        await queryStore.executeQuery(node.connectionId, node.database, sql);
-        message.success("删除成功");
-        await connectionStore.setActiveDatabase(node.database, true); // Force refresh
-      } catch (error) {
-        message.error(`删除失败: ${error.message}`);
-      }
-    },
-  });
+
+
+const confirmTruncateTable = (nodes) => {
+
+  confirmBulkOperation(nodes,
+
+    (n) => `TRUNCATE TABLE \`${n.database}\`.\`${n.table}\``,
+
+    {
+
+      title: '确认截断表',
+
+      content: '您确定要截断以下表吗？此操作会重置自增计数器，且不可恢复。',
+
+      okText: '确认截断'
+
+    }
+
+  );
+
+};
+
+
+
+const confirmDeleteTable = (nodes) => {
+
+  confirmBulkOperation(nodes,
+
+    (n) => `DROP TABLE \`${n.database}\`.\`${n.table}\``,
+
+    {
+
+      title: '确认删除表',
+
+      content: '您确定要删除以下表吗？此操作不可恢复。',
+
+      okText: '确认删除'
+
+    }
+
+  );
+
 };
 
 </script>

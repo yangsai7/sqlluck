@@ -277,7 +277,7 @@ const previewSql = computed(() => {
         if (idx.type === 'PRIMARY') {
             return '  PRIMARY KEY (' + cols + ')'
         }
-        return '  ' + idx.type + ' KEY `' + idx.name + '` (' + cols + ') USING ' + idx.method;
+        return '  ' + idx.type + ' `' + idx.name + '` (' + cols + ') USING ' + idx.method;
     }).filter(Boolean);
 
     let sql = 'CREATE TABLE `' + props.database + '`.`' + tableName.value + '` (\n';
