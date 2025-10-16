@@ -71,6 +71,12 @@
               <template v-if="column.key === 'length'">
                 <a-input v-model:value="record.Length" placeholder="长度/值" />
               </template>
+              <template v-if="column.key === 'pk'">
+                <a-checkbox v-model:checked="record.isPrimaryKey"></a-checkbox>
+              </template>
+              <template v-if="column.key === 'ai'">
+                <a-checkbox v-model:checked="record.isAutoIncrement"></a-checkbox>
+              </template>
               <template v-if="column.key === 'nullable'">
                 <a-checkbox v-model:checked="record.Null"></a-checkbox>
               </template>
@@ -118,7 +124,6 @@
                   placeholder="类型"
                   style="width: 100%"
                 >
-                  <a-select-option value="PRIMARY">PRIMARY</a-select-option>
                   <a-select-option value="UNIQUE">UNIQUE</a-select-option>
                   <a-select-option value="INDEX">INDEX</a-select-option>
                   <a-select-option value="FULLTEXT">FULLTEXT</a-select-option>
@@ -258,7 +263,9 @@ const columns = [
   { title: "字段名", key: "name", width: 150 },
   { title: "数据类型", key: "type", width: 120 },
   { title: "长度/值", key: "length", width: 100 },
-  { title: "允许NULL", key: "nullable", width: 80 },
+  { title: "主键", key: "pk", width: 60, align: 'center' },
+  { title: "自增", key: "ai", width: 60, align: 'center' },
+  { title: "允许NULL", key: "nullable", width: 80, align: 'center' },
   { title: "默认值", key: "default", width: 120 },
   { title: "注释", key: "comment" },
   { title: "操作", key: "action", width: 80, fixed: "right" },
@@ -283,11 +290,13 @@ const addColumn = () => {
   structureData.value.push({
     id: idCounter++,
     Field: "",
-    Type: "",
+    Type: "INT",
     Length: "",
-    Null: true,
+    Null: false,
     Default: null,
     Comment: "",
+    isPrimaryKey: false,
+    isAutoIncrement: false,
   });
 };
 
@@ -336,11 +345,15 @@ const loadTableData = async () => {
           type = (typeMatch[1] + (typeMatch[3] || '')).toUpperCase().trim();
           length = typeMatch[2] || "";
         }
+        const isPrimaryKey = col.Key === 'PRI';
         return {
           ...col,
           id: i,
           Type: type,
           Length: length,
+          Null: col.Null === 'YES',
+          isPrimaryKey,
+          isAutoIncrement: col.Extra.includes('auto_increment'),
         };
       });
       structureData.value = JSON.parse(JSON.stringify(loadedStructure));
@@ -351,30 +364,27 @@ const loadTableData = async () => {
     if (createSqlRes.success) {
       const createSql = createSqlRes.data[0]["Create Table"];
 
-      // Clear existing index data before loading new data
       indexesData.value = [];
       originalIndexesData.value = [];
       indexIdCounter = 0;
 
-      const indexRegex = /(?:(PRIMARY|UNIQUE|FULLTEXT|SPATIAL)?\s*KEY|PRIMARY\s*KEY)\s*(?:`?([^`\s(]+)`?)?\s*\(([^)]+)\)/g;
+      const indexRegex = /(?:(UNIQUE|FULLTEXT|SPATIAL)?\s*KEY)\s*(?:`?([^`\s(]+)`?)?\s*\(([^)]+)\)/g;
       let match;
       while ((match = indexRegex.exec(createSql)) !== null) {
-        const type =
-          match[1] || (match[0].startsWith("PRIMARY") ? "PRIMARY" : "INDEX");
+        const type = match[1] || "INDEX";
         const cols = match[3].replace(/`/g, "").split(",").map(s => s.trim());
-        const name = match[2] || cols.join(', ');
+        const name = match[2] || cols.join('_');
         const newIndex = {
           id: indexIdCounter++,
           name,
           type,
           columns: cols,
-          method: "BTREE", // Default, can be parsed if needed
+          method: "BTREE",
         };
         indexesData.value.push(JSON.parse(JSON.stringify(newIndex)));
         originalIndexesData.value.push(newIndex);
       }
 
-      // Parse table options
       const optionsRegex = new RegExp(
         "ENGINE=(\\w+)|DEFAULT CHARSET=(\\w+)|COLLATE=(\\w+)|COMMENT='([^']*)'",
         "g"
@@ -428,25 +438,25 @@ onMounted(() => {
 });
 
 const previewSql = computed(() => {
+  const getColDef = (col) => {
+    let def = `${col.Type}`;
+    if (col.Length) def += `(${col.Length})`;
+    if (!col.Null) def += ' NOT NULL';
+    if (col.isAutoIncrement) def += ' AUTO_INCREMENT';
+    if (col.Default != null && col.Default !== '') {
+        if (String(col.Default).toUpperCase() === "CURRENT_TIMESTAMP") {
+          def += " DEFAULT CURRENT_TIMESTAMP";
+        } else {
+          def += ` DEFAULT '${String(col.Default).replace(/'/g, "''")}'`;
+        }
+    }
+    if (col.Comment) def += ` COMMENT '${col.Comment.replace(/'/g, "''")}'`;
+    return def;
+  };
+
   if (props.mode === "edit") {
     const alterClauses = [];
 
-    const getColDef = (col) => {
-      let def = `${col.Type}`;
-      if (col.Length) def += `(${col.Length})`;
-      if (!col.Null) def += ' NOT NULL';
-      if (col.Default) {
-          if (col.Default.toUpperCase() === "CURRENT_TIMESTAMP") {
-            def += " DEFAULT CURRENT_TIMESTAMP";
-          } else {
-            def += ` DEFAULT '${String(col.Default).replace(/'/g, "''")}'`;
-          }
-      }
-      if (col.Comment) def += ` COMMENT '${col.Comment.replace(/'/g, "''")}'`;
-      return def;
-    };
-
-    // Column changes
     const finalStructure = structureData.value;
     const initialStructure = originalStructureData.value;
 
@@ -472,34 +482,36 @@ const previewSql = computed(() => {
       }
     });
 
-    // Index changes (ADD/DROP only for now)
-    const finalIndexes = indexesData.value;
-    const initialIndexes = originalIndexesData.value;
+    const initialPKFields = originalStructureData.value.filter(c => c.isPrimaryKey).map(c => c.Field);
+    const finalPKFields = structureData.value.filter(c => c.isPrimaryKey).map(c => c.Field);
+
+    if (JSON.stringify(initialPKFields.sort()) !== JSON.stringify(finalPKFields.sort())) {
+      if (initialPKFields.length > 0) {
+        alterClauses.push('DROP PRIMARY KEY');
+      }
+      if (finalPKFields.length > 0) {
+        alterClauses.push(`ADD PRIMARY KEY (${finalPKFields.map(f => `\`${f}\``).join(', ')})`);
+      }
+    }
+
+    const finalIndexes = indexesData.value.filter(i => i.type !== 'PRIMARY');
+    const initialIndexes = originalIndexesData.value.filter(i => i.type !== 'PRIMARY');
     const initialIndexNames = initialIndexes.map(i => i.name).filter(Boolean);
     const finalIndexNames = finalIndexes.map(i => i.name).filter(Boolean);
 
     initialIndexes.forEach(initialIdx => {
       if (initialIdx.name && !finalIndexNames.includes(initialIdx.name)) {
-        if (initialIdx.type === 'PRIMARY') {
-          alterClauses.push('DROP PRIMARY KEY');
-        } else {
-          alterClauses.push(`DROP INDEX \`${initialIdx.name}\``);
-        }
+        alterClauses.push(`DROP INDEX \`${initialIdx.name}\``);
       }
     });
 
     finalIndexes.forEach(finalIdx => {
       if (finalIdx.name && !initialIndexNames.includes(finalIdx.name)) {
         const cols = finalIdx.columns.map(c => `\`${c}\``).join(', ');
-        if (finalIdx.type === 'PRIMARY') {
-          alterClauses.push(`ADD PRIMARY KEY (${cols})`);
-        } else {
-          alterClauses.push(`ADD ${finalIdx.type} \`${finalIdx.name}\` (${cols})`);
-        }
+        alterClauses.push(`ADD ${finalIdx.type} \`${finalIdx.name}\` (${cols})`);
       }
     });
 
-    // Table options
     const optionClauses = [];
     if (tableEngine.value !== originalTableEngine.value) optionClauses.push(`ENGINE=${tableEngine.value}`);
     if (tableCharset.value !== originalTableCharset.value) optionClauses.push(`DEFAULT CHARSET=${tableCharset.value}`);
@@ -509,13 +521,12 @@ const previewSql = computed(() => {
       alterClauses.push(optionClauses.join(' '));
     }
     
-    // Rename
     if (tableName.value !== props.table) {
       alterClauses.push(`RENAME TO \`${props.database}\`.\`${tableName.value}\``);
     }
 
     if (alterClauses.length === 0) {
-      return "-- 没有检测到更改 (索引的修改操作暂不支持预览)";
+      return "-- 没有检测到更改";
     }
 
     return `ALTER TABLE \`${props.database}\`.\`${props.table}\`\n` + alterClauses.join(',\n') + ';';
@@ -526,45 +537,25 @@ const previewSql = computed(() => {
   const columnDefs = structureData.value
     .map((col) => {
       if (!col.Field || !col.Type) return null;
-      let colType = col.Length ? `${col.Type}(${col.Length})` : col.Type;
-      let colSql = "  `" + col.Field + "` " + colType;
-      if (!col.Null) {
-        colSql += " NOT NULL";
-      }
-      if (col.Default) {
-        if (col.Default.toUpperCase() === "CURRENT_TIMESTAMP") {
-          colSql += " DEFAULT CURRENT_TIMESTAMP";
-        } else {
-          colSql +=
-            " DEFAULT '" + String(col.Default).replace(/'/g, "''") + "'";
-        }
-      }
-      if (col.Comment) {
-        colSql += " COMMENT '" + col.Comment.replace(/'/g, "''") + "'";
-      }
-      return colSql;
+      return "  `" + col.Field + "` " + getColDef(col);
     })
     .filter(Boolean);
+
+  const primaryKeyCols = structureData.value
+    .filter(col => col.isPrimaryKey)
+    .map(col => `\`${col.Field}\``);
 
   const indexDefs = indexesData.value
     .map((idx) => {
       if (!idx.name || idx.columns.length === 0) return null;
       const cols = idx.columns.map((c) => "`" + c + "`").join(", ");
-      if (idx.type === "PRIMARY") {
-        return "  PRIMARY KEY (" + cols + ")";
-      }
-      return (
-        "  " +
-        idx.type +
-        " `" +
-        idx.name +
-        "` (" +
-        cols +
-        ") USING " +
-        idx.method
-      );
+      return `  ${idx.type} \`${idx.name}\` (${cols}) USING ${idx.method}`;
     })
     .filter(Boolean);
+    
+  if (primaryKeyCols.length > 0) {
+    indexDefs.unshift(`  PRIMARY KEY (${primaryKeyCols.join(', ')})`);
+  }
 
   let sql = "CREATE TABLE `" + props.database + "`.`" + tableName.value + "` (";
   sql += [...columnDefs, ...indexDefs].join(",\n");
@@ -592,7 +583,6 @@ const saveChanges = async () => {
     try {
       await queryStore.executeQuery(props.connectionId, props.database, previewSql.value);
       message.success("表创建成功");
-      // TODO: Close tab and refresh tree
     } catch (error) {
       message.error(`创建表失败: ${error.message}`);
     } finally {
@@ -607,7 +597,7 @@ const saveChanges = async () => {
     try {
       await queryStore.executeQuery(props.connectionId, props.database, previewSql.value);
       message.success("表修改成功");
-      loadTableData(); // Re-load data to reflect changes
+      loadTableData();
     } catch (error) {
       message.error(`修改表失败: ${error.message}`);
     } finally {
