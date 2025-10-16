@@ -69,7 +69,7 @@
         @resizeColumn="handleResizeColumn"
       >
         <template #bodyCell="{ column, text, record }">
-          <div class="cell-content" :class="{ 'dirty-cell': isCellDirty(record, column) }" @click.stop="setEditingCell(record, column)">
+          <div class="cell-content" :class="{ 'dirty-cell': isCellDirty(record, column) }" @dblclick.stop="setEditingCell(record, column)">
             <template v-if="isEditing(record, column)">
               <a-input
                 ref="editingInputRef"
@@ -172,10 +172,6 @@ const customRow = (record) => {
     onClick: (event) => {
       const key = getRowKey(record);
       if (!key) return;
-
-      if (event.target.closest('.cell-content')) {
-        return;
-      }
 
       const currentKeys = [...selectedRowKeys.value];
       const data = filteredData.value;
