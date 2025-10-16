@@ -352,12 +352,8 @@ const handleNodeSelect = async (selectedKeys, { node }) => {
   }
 
   if (data.type === "database") {
-    const details = connectionStore.connectionDetails[data.connectionId];
-    const dbObjects = details ? details.dbObjects[data.database] : undefined;
     await connectionStore.setActiveDatabase(data.database);
-    if (dbObjects) {
-      uiStore.showObjectsView({ connectionId: data.connectionId, dbName: data.database });
-    }
+    uiStore.showObjectsView({ connectionId: data.connectionId, dbName: data.database });
   } else if (data.type === 'folder') {
     if (data.database !== connectionStore.activeDatabaseName) {
       await connectionStore.setActiveDatabase(data.database);
