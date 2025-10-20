@@ -110,6 +110,10 @@
                 :database="tab.database"
                 :table="tab.table"
               />
+              <PerformanceMonitor
+                v-if="tab.type === 'performance'"
+                :connection-id="tab.connectionId"
+              />
             </a-tab-pane>
           </a-tabs>
         </a-layout-content>
@@ -144,6 +148,7 @@ import TableDataView from '@/components/TableDataView.vue'
 import TableEditor from '@/components/TableEditor.vue'
 import ImportExportDialog from '@/components/ImportExportDialog.vue'
 import ObjectList from '@/components/ObjectList.vue'
+import PerformanceMonitor from '@/views/PerformanceMonitor.vue'
 
 const connectionStore = useConnectionStore()
 const uiStore = useUIStore()

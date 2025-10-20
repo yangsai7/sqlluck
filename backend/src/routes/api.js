@@ -4,6 +4,7 @@ const multer = require('multer');
 const path = require('path');
 const ConnectionController = require('../controllers/ConnectionController');
 const QueryController = require('../controllers/QueryController');
+const PerformanceController = require('../controllers/PerformanceController');
 const ImportExportController = require('../controllers/ImportExportController');
 
 const router = express.Router();
@@ -61,6 +62,11 @@ router.get('/connections/:connectionId/databases/:database/tables/:table/data', 
 router.post('/connections/:connectionId/databases/:database/tables/:table/data', QueryController.insertData);
 router.put('/connections/:connectionId/databases/:database/tables/:table/data', QueryController.updateData);
 router.delete('/connections/:connectionId/databases/:database/tables/:table/data', QueryController.deleteData);
+
+// 性能监控路由
+router.get('/connections/:connectionId/performance', PerformanceController.getPerformanceMetrics);
+router.get('/connections/:connectionId/locks', PerformanceController.getLockInfo);
+router.get('/connections/:connectionId/hot-sql', PerformanceController.getHotSql);
 
 // 导入导出路由
 router.get('/connections/:connectionId/databases/:database/tables/:table/export/csv', ImportExportController.exportToCSV);

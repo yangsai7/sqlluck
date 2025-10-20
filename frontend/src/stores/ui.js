@@ -168,6 +168,21 @@ export const useUIStore = defineStore('ui', {
       this.activeMainTab = tabName;
     },
 
+    openPerformanceMonitorTab({ connectionId }) {
+      const tabName = `performance-${connectionId}`;
+      const existingTab = this.dataTabs.find(tab => tab.name === tabName);
+
+      if (!existingTab) {
+        this.dataTabs.push({
+          name: tabName,
+          label: '性能监控',
+          type: 'performance',
+          connectionId: connectionId,
+        });
+      }
+      this.activeMainTab = tabName;
+    },
+
     closeTab(tabKey) {
       const index = this.dataTabs.findIndex(tab => tab.name === tabKey);
       if (index > -1) {

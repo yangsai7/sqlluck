@@ -126,4 +126,22 @@ export const queryAPI = {
   }
 }
 
+// 性能监控API
+export const performanceAPI = {
+  // 获取性能指标
+  getPerformanceMetrics(connectionId) {
+    return api.get(`/connections/${connectionId}/performance`)
+  },
+
+  // 获取锁信息
+  getLockInfo(connectionId) {
+    return api.get(`/connections/${connectionId}/locks`)
+  },
+
+  // 获取热点SQL
+  getHotSql(connectionId) {
+    return api.get(`/connections/${connectionId}/hot-sql`)
+  }
+}
+
 export default api

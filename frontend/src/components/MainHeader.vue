@@ -28,12 +28,17 @@
       <template #icon><BarChartOutlined /></template>
       BI
     </a-button>
+    <a-button type="text" size="large" @click="handleMenuClick('performance')">
+      <template #icon><DashboardOutlined /></template>
+      性能监控
+    </a-button>
     <ConnectionDialog v-model:visible="showConnectionDialog" @connected="handleConnected" />
   </div>
 </template>
 
 <script setup>
 import { ref } from 'vue';
+import { useRouter } from 'vue-router';
 import {
   Button as AButton
 } from 'ant-design-vue';
@@ -45,12 +50,14 @@ import {
   UserOutlined,
   BarChartOutlined,
   TableOutlined,
+  DashboardOutlined,
 } from '@ant-design/icons-vue';
 import ConnectionDialog from './ConnectionDialog.vue';
 import { useUIStore } from '@/stores/ui';
 import { useConnectionStore } from '@/stores/connection';
 import { message } from 'ant-design-vue';
 
+const router = useRouter();
 const uiStore = useUIStore();
 const connectionStore = useConnectionStore();
 const showConnectionDialog = ref(false);
@@ -70,6 +77,12 @@ const handleMenuClick = (action) => {
   } else if (['tables', 'views', 'procedures'].includes(action)) {
     uiStore.setObjectListFilter(action);
     uiStore.setActiveMainTab('objects');
+  } else if (action === 'performance') {
+    if (connectionStore.activeConnection) {
+      uiStore.openPerformanceMonitorTab({ connectionId: connectionStore.activeConnectionId });
+    } else {
+      message.info('请先选择一个数据库连接');
+    }
   } else {
     // Placeholder for other actions
     message.info(`功能 '${action}' 暂未实现`);
