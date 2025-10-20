@@ -30,6 +30,12 @@ export const useConnectionStore = defineStore('connection', {
     dbObjects: (state) => {
         if (!state.activeConnectionId || !state.connectionDetails[state.activeConnectionId]) return {};
         return state.connectionDetails[state.activeConnectionId].dbObjects;
+    },
+    tables: (state) => {
+      const connDetails = state.connectionDetails[state.activeConnectionId];
+      if (!connDetails || !connDetails.activeDatabaseName) return [];
+      const dbObjects = connDetails.dbObjects[connDetails.activeDatabaseName];
+      return dbObjects && dbObjects.tables ? dbObjects.tables.map(t => t.name) : [];
     }
   },
 

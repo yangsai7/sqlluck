@@ -2,7 +2,7 @@
   <div class="import-export-dialog">
     <a-tabs v-model:activeKey="activeTab">
       <!-- 数据导出 -->
-      <a-tab-pane key="export-data" tab="数据导出">
+      <a-tab-pane key="export-data" tab="单表导出">
         <div class="tab-content">
           <a-form :model="exportForm" :label-col="{ span: 4 }" :wrapper-col="{ span: 20 }">
             <a-form-item label="导出表">
@@ -15,11 +15,13 @@
             <a-form-item label="导出格式">
               <a-radio-group v-model:value="exportForm.format">
                 <a-radio value="csv">CSV</a-radio>
-                <a-radio value="json" disabled>JSON (开发中)</a-radio>
-                <a-radio value="excel" disabled>Excel (开发中)</a-radio>
+                <a-radio value="sql">SQL</a-radio>
               </a-radio-group>
             </a-form-item>
-            <a-form-item label="导出行数">
+            <a-form-item label="导出选项">
+              <a-checkbox v-model:checked="exportForm.includeData">包含数据</a-checkbox>
+            </a-form-item>
+            <a-form-item v-if="exportForm.format === 'csv'" label="导出行数">
               <a-input-number v-model:value="exportForm.limit" :min="1" :max="100000" style="width: 100%" />
               <div class="form-tip">最大支持10万行数据导出</div>
             </a-form-item>
@@ -33,7 +35,7 @@
       </a-tab-pane>
 
       <!-- 结构导出 -->
-      <a-tab-pane key="export-structure" tab="结构导出">
+      <a-tab-pane key="export-structure" tab="整库导出">
         <div class="tab-content">
           <a-form :model="structureForm" :label-col="{ span: 4 }" :wrapper-col="{ span: 20 }">
             <a-form-item label="导出数据库">
@@ -43,19 +45,15 @@
                 </a-select-option>
               </a-select>
             </a-form-item>
+            <a-form-item label="导出选项">
+              <a-checkbox v-model:checked="structureForm.includeData">包含数据</a-checkbox>
+            </a-form-item>
             <a-form-item :wrapper-col="{ offset: 4 }">
               <a-button type="primary" :loading="exportingStructure" :disabled="!structureForm.database" @click="exportStructure">
                 导出结构
               </a-button>
             </a-form-item>
           </a-form>
-          <div v-if="structureSQL" class="structure-preview">
-            <div class="preview-header">
-              <h4>结构预览</h4>
-              <a-button size="small" @click="copyStructureSQL">复制SQL</a-button>
-            </div>
-            <a-textarea :value="structureSQL" :rows="15" readonly class="structure-sql" />
-          </div>
         </div>
       </a-tab-pane>
 
@@ -119,7 +117,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, watch } from 'vue'
+import { ref, reactive, watch, computed } from 'vue'
 import { message } from 'ant-design-vue'
 import { UploadOutlined } from '@ant-design/icons-vue'
 import { useConnectionStore } from '@/stores/connection'
@@ -136,9 +134,8 @@ const exportingStructure = ref(false)
 const importing = ref(false)
 const executingSql = ref(false)
 
-const exportForm = reactive({ table: '', format: 'csv', limit: 10000 })
-const structureForm = reactive({ database: '' })
-const structureSQL = ref('')
+const exportForm = reactive({ table: '', format: 'csv', limit: 10000, includeData: true })
+const structureForm = reactive({ database: '', includeData: false })
 const importForm = reactive({ table: '', filepath: '', hasHeader: true })
 const sqlForm = reactive({ filepath: '' })
 const sqlExecuteResult = ref(null)
@@ -152,21 +149,26 @@ const exportData = async () => {
   }
   exporting.value = true
   try {
-    const response = await api.get(
-      `/connections/${connectionStore.activeConnectionId}/databases/${connectionStore.activeDatabaseName}/tables/${exportForm.table}/export/csv`,
-      { params: { limit: exportForm.limit } }
-    )
+    const format = exportForm.format;
+    let url = `/connections/${connectionStore.activeConnectionId}/databases/${connectionStore.activeDatabaseName}/tables/${exportForm.table}/export/${format}`;
+    const params = {
+      limit: exportForm.limit,
+      includeData: exportForm.includeData
+    };
+
+    const response = await api.get(url, { params });
+
     if (response.success) {
-      const downloadUrl = `/api/download/${response.filename}`
-      const link = document.createElement('a')
-      link.href = downloadUrl
-      link.download = response.filename
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
-      message.success(`导出成功，共${response.recordCount}条记录`)
+      const downloadUrl = `/api/download/${response.filename}`;
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.download = response.filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      message.success(`导出成功，共${response.recordCount}条记录`);
     } else {
-      message.error(response.error)
+      message.error(response.error);
     }
   } catch (error) { message.error('导出失败: ' + error.message) } finally { exporting.value = false }
 }
@@ -178,20 +180,20 @@ const exportStructure = async () => {
   exportingStructure.value = true
   try {
     const response = await api.get(
-      `/connections/${connectionStore.activeConnectionId}/databases/${structureForm.database}/export/structure`
+      `/connections/${connectionStore.activeConnectionId}/databases/${structureForm.database}/export/structure`,
+      { params: { includeData: structureForm.includeData } }
     )
     if (response.success) {
-      structureSQL.value = response.sql
-      message.success('结构导出成功')
+        const downloadUrl = `/api/download/${response.filename}`;
+        const link = document.createElement('a');
+        link.href = downloadUrl;
+        link.download = response.filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        message.success('导出成功');
     } else { message.error(response.error) }
   } catch (error) { message.error('导出结构失败: ' + error.message) } finally { exportingStructure.value = false }
-}
-
-const copyStructureSQL = async () => {
-  try {
-    await navigator.clipboard.writeText(structureSQL.value)
-    message.success('复制成功')
-  } catch (error) { message.error('复制失败') }
 }
 
 const beforeUpload = (file) => {

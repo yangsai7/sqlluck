@@ -11,40 +11,27 @@ class ImportExportController {
     static async exportToCSV(req, res) {
         try {
             const { connectionId, database, table } = req.params;
-            const { limit = 10000 } = req.query;
+            const { limit = 10000, includeData } = req.query;
 
             const connection = connectionManager.getConnection(connectionId);
             if (!connection) {
-                return res.status(404).json({
-                    success: false,
-                    error: '连接不存在'
-                });
+                return res.status(404).json({ success: false, error: '连接不存在' });
             }
 
-            // 获取数据
-            const sql = `SELECT * FROM \`${database}\`.\`${table}\` LIMIT ${parseInt(limit)}`;
-            const result = await connection.query(sql);
+            // Get headers by fetching one row
+            const headerSql = `SELECT * FROM \`${database}\`.\`${table}\` LIMIT 1`;
+            const headerResult = await connection.query(headerSql);
 
-            if (!result.success || !result.data.length) {
-                return res.json({
-                    success: false,
-                    error: '没有数据可导出'
-                });
+            if (!headerResult.success || headerResult.data.length === 0) {
+                return res.json({ success: false, error: '无法获取表结构' });
             }
 
-            // 创建临时文件
+            const headers = Object.keys(headerResult.data[0]).map(key => ({ id: key, title: key }));
+
             const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
             const filename = `${table}_${timestamp}.csv`;
             const filepath = path.join(__dirname, '../../temp', filename);
-
-            // 确保temp目录存在
             await fs.mkdir(path.dirname(filepath), { recursive: true });
-
-            // 写入CSV文件
-            const headers = Object.keys(result.data[0]).map(key => ({
-                id: key,
-                title: key
-            }));
 
             const csvWriter = createCsvWriter({
                 path: filepath,
@@ -52,39 +39,109 @@ class ImportExportController {
                 encoding: 'utf8'
             });
 
-            await csvWriter.writeRecords(result.data);
+            let records = [];
+            let recordCount = 0;
 
-            // 返回文件路径供下载
+            if (includeData !== 'false') {
+                const dataSql = `SELECT * FROM \`${database}\`.\`${table}\` LIMIT ${parseInt(limit)}`;
+                const dataResult = await connection.query(dataSql);
+                if (dataResult.success && dataResult.data.length > 0) {
+                    records = dataResult.data;
+                    recordCount = dataResult.data.length;
+                }
+            }
+
+            await csvWriter.writeRecords(records); // writeRecords can handle an empty array
+
             res.json({
                 success: true,
                 message: '导出成功',
                 filename,
-                filepath,
-                recordCount: result.data.length
+                recordCount
             });
 
         } catch (error) {
-            res.status(500).json({
-                success: false,
-                error: '导出失败: ' + error.message
-            });
+            res.status(500).json({ success: false, error: '导出失败: ' + error.message });
         }
     }
+
+    static async exportToSQL(req, res) {
+        try {
+            const { connectionId, database, table } = req.params;
+            const { includeData } = req.query;
+
+            const connection = connectionManager.getConnection(connectionId);
+            if (!connection) {
+                return res.status(404).json({ success: false, error: '连接不存在' });
+            }
+
+            let content = '';
+            let recordCount = 0;
+
+            // 1. Get CREATE TABLE statement
+            const ddlResult = await connection.query(`SHOW CREATE TABLE \`${database}\`.\`${table}\``);
+            if (ddlResult.success && ddlResult.data.length > 0) {
+                content += ddlResult.data[0]['Create Table'] + ';\n\n';
+            }
+
+            // 2. Get data and generate INSERT statements if includeData is not false
+            if (includeData !== 'false') {
+                const dataResult = await connection.query(`SELECT * FROM \`${database}\`.\`${table}\``);
+                if (dataResult.success && dataResult.data.length > 0) {
+                    recordCount = dataResult.data.length;
+                    const columns = Object.keys(dataResult.data[0]);
+                    const insertTpl = `INSERT INTO \`${table}\` (\`${columns.join('\`, \`')}\`) VALUES\n`;
+                    content += insertTpl;
+                    const values = dataResult.data.map(row =>
+                        '(' + columns.map(col =>
+                            row[col] === null ? 'NULL' : `'${String(row[col]).replace(/'/g, "''")}'`
+                        ).join(', ') + ')'
+                    ).join(',\n');
+                    content += values + ';\n';
+                }
+            }
+
+            if (!content.trim()) {
+                return res.json({ success: false, error: '没有内容可导出' });
+            }
+
+            // 3. Write to temp file
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+            const filename = `${table}_${timestamp}.sql`;
+            const filepath = path.join(__dirname, '../../temp', filename);
+            await fs.mkdir(path.dirname(filepath), { recursive: true });
+            await fs.writeFile(filepath, content, 'utf8');
+
+            // 4. Return filename
+            res.json({
+                success: true,
+                message: '导出成功',
+                filename,
+                recordCount
+            });
+
+        } catch (error) {
+            res.status(500).json({ success: false, error: '导出失败: ' + error.message });
+        }
+    }
+
 
     // 导出数据库结构
     static async exportStructure(req, res) {
         try {
             const { connectionId, database } = req.params;
+            const { includeData } = req.query;
 
             const connection = connectionManager.getConnection(connectionId);
             if (!connection) {
-                return res.status(404).json({
-                    success: false,
-                    error: '连接不存在'
-                });
+                return res.status(404).json({ success: false, error: '连接不存在' });
             }
 
-            // 使用mysqldump导出结构
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+            const filename = `${database}_${timestamp}.sql`;
+            const filepath = path.join(__dirname, '../../temp', filename);
+            await fs.mkdir(path.dirname(filepath), { recursive: true });
+
             const config = connection.config;
             const dumpOptions = {
                 connection: {
@@ -94,38 +151,27 @@ class ImportExportController {
                     database: database,
                     port: config.port || 3306
                 },
-                dumpToFile: false,
+                dumpToFile: filepath,
                 compressFile: false,
                 dump: {
                     schema: {
-                        table: {
-                            ifNotExist: true,
-                            dropIfExist: false,
-                            charset: true
-                        }
+                        table: { ifNotExist: true, dropIfExist: false, charset: true }
                     },
-                    data: false, // 只导出结构，不导出数据
-                    trigger: {
-                        delimiter: ';;',
-                        dropIfExist: true,
-                        definer: false
-                    }
+                    data: includeData === 'true' ? {} : false,
+                    trigger: { delimiter: ';;', dropIfExist: true, definer: false }
                 }
             };
 
-            const dump = await mysqldump(dumpOptions);
+            await mysqldump(dumpOptions);
 
             res.json({
                 success: true,
-                sql: dump.dump.schema,
-                message: '结构导出成功'
+                message: '导出成功',
+                filename
             });
 
         } catch (error) {
-            res.status(500).json({
-                success: false,
-                error: '导出结构失败: ' + error.message
-            });
+            res.status(500).json({ success: false, error: '导出结构失败: ' + error.message });
         }
     }
 

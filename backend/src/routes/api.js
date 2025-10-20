@@ -70,6 +70,7 @@ router.get('/connections/:connectionId/hot-sql', PerformanceController.getHotSql
 
 // 导入导出路由
 router.get('/connections/:connectionId/databases/:database/tables/:table/export/csv', ImportExportController.exportToCSV);
+router.get('/connections/:connectionId/databases/:database/tables/:table/export/sql', ImportExportController.exportToSQL);
 router.get('/connections/:connectionId/databases/:database/export/structure', ImportExportController.exportStructure);
 router.post('/connections/:connectionId/databases/:database/tables/:table/import/csv', ImportExportController.importFromCSV);
 router.post('/connections/:connectionId/execute-sql-file', ImportExportController.executeSQLFile);
