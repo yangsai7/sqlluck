@@ -16,13 +16,11 @@ class QueryController {
                 });
             }
 
-            const connection = connectionManager.getConnection(connectionId);
-            if (!connection) {
-                return res.status(404).json({
-                    success: false,
-                    error: '连接不存在'
-                });
+            const connResult = await connectionManager.getActiveConnection(connectionId);
+            if (!connResult.success) {
+                return res.status(404).json({ success: false, error: connResult.error });
             }
+            const { connection } = connResult;
 
             const result = await connection.query(sql, params, database);
 
@@ -43,14 +41,12 @@ class QueryController {
     static async getTableStructure(req, res) {
         try {
             const { connectionId, database, table } = req.params;
-            const connection = connectionManager.getConnection(connectionId);
-
-            if (!connection) {
-                return res.status(404).json({
-                    success: false,
-                    error: '连接不存在'
-                });
+            
+            const connResult = await connectionManager.getActiveConnection(connectionId);
+            if (!connResult.success) {
+                return res.status(404).json({ success: false, error: connResult.error });
             }
+            const { connection } = connResult;
 
             const result = await connection.getTableStructure(database, table);
             res.json(result);
@@ -67,14 +63,12 @@ class QueryController {
         try {
             const { connectionId, database, table } = req.params;
             const { limit = 100, offset = 0 } = req.query;
-            const connection = connectionManager.getConnection(connectionId);
 
-            if (!connection) {
-                return res.status(404).json({
-                    success: false,
-                    error: '连接不存在'
-                });
+            const connResult = await connectionManager.getActiveConnection(connectionId);
+            if (!connResult.success) {
+                return res.status(404).json({ success: false, error: connResult.error });
             }
+            const { connection } = connResult;
 
             // 同时获取数据和总数
             const [dataResult, countResult] = await Promise.all([
@@ -111,14 +105,12 @@ class QueryController {
         try {
             const { connectionId, database, table } = req.params;
             const { data } = req.body;
-            const connection = connectionManager.getConnection(connectionId);
 
-            if (!connection) {
-                return res.status(404).json({
-                    success: false,
-                    error: '连接不存在'
-                });
+            const connResult = await connectionManager.getActiveConnection(connectionId);
+            if (!connResult.success) {
+                return res.status(404).json({ success: false, error: connResult.error });
             }
+            const { connection } = connResult;
 
             if (!data || typeof data !== 'object') {
                 return res.status(400).json({
@@ -143,14 +135,12 @@ class QueryController {
         try {
             const { connectionId, database, table } = req.params;
             const { data, where } = req.body;
-            const connection = connectionManager.getConnection(connectionId);
 
-            if (!connection) {
-                return res.status(404).json({
-                    success: false,
-                    error: '连接不存在'
-                });
+            const connResult = await connectionManager.getActiveConnection(connectionId);
+            if (!connResult.success) {
+                return res.status(404).json({ success: false, error: connResult.error });
             }
+            const { connection } = connResult;
 
             if (!data || !where) {
                 return res.status(400).json({
@@ -175,14 +165,12 @@ class QueryController {
         try {
             const { connectionId, database, table } = req.params;
             const { where } = req.body;
-            const connection = connectionManager.getConnection(connectionId);
 
-            if (!connection) {
-                return res.status(404).json({
-                    success: false,
-                    error: '连接不存在'
-                });
+            const connResult = await connectionManager.getActiveConnection(connectionId);
+            if (!connResult.success) {
+                return res.status(404).json({ success: false, error: connResult.error });
             }
+            const { connection } = connResult;
 
             if (!where) {
                 return res.status(400).json({
