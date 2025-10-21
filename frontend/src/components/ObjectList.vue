@@ -1,9 +1,18 @@
 <template>
-  <div class="object-list-view" tabindex="0" @keydown.delete.prevent="handleDeleteKey" @keydown.ctrl.c.prevent="handleCopy" @keydown.meta.c.prevent="handleCopy" @keydown.ctrl.v.prevent="handlePaste" @keydown.meta.v.prevent="handlePaste">
+  <div ref="rootDivRef" class="object-list-view" tabindex="0" @keydown="handleKeyDown">
     <div v-if="!targetDB" class="no-selection">
       <a-empty description="在左侧双击一个数据库以查看其对象" />
     </div>
-    <div v-else>
+    <div v-else class="list-container">
+      <div class="list-toolbar">
+        <a-input-search
+          ref="searchInputRef"
+          v-model:value="searchText"
+          placeholder="搜索..."
+          style="width: 200px"
+          allow-clear
+        />
+      </div>
       <a-table
         :columns="columns"
         :data-source="filteredObjects"
@@ -100,7 +109,7 @@
 </template>
 
 <script setup>
-import { computed, ref, h } from 'vue';
+import { computed, ref, h, onMounted, onUnmounted } from 'vue';
 import { useUIStore } from '@/stores/ui';
 import { useConnectionStore } from '@/stores/connection';
 import { useQueryStore } from '@/stores/query';
@@ -116,6 +125,7 @@ import {
   Input,
   Textarea as ATextarea,
   Button as AButton,
+  InputSearch as AInputSearch,
 } from 'ant-design-vue';
 import {
   TableOutlined,
@@ -137,9 +147,58 @@ const uiStore = useUIStore();
 const connectionStore = useConnectionStore();
 const queryStore = useQueryStore();
 
+const rootDivRef = ref(null);
+const searchText = ref('');
+const searchInputRef = ref(null);
+
 const targetDB = computed(() => uiStore.objectsViewTarget);
 const selectedRowKeys = ref([]);
 let lastSelectedRowKey = null;
+const isDragging = ref(false);
+const dragMode = ref('add');
+const hasDragged = ref(false);
+
+const focusSearch = () => {
+  searchInputRef.value?.focus();
+};
+
+const handleKeyDown = (event) => {
+  const target = event.target;
+  const isInputFocused = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable;
+
+  if ((event.ctrlKey || event.metaKey) && event.key === 'f') {
+    event.preventDefault();
+    focusSearch();
+    return;
+  }
+
+  if (isInputFocused) {
+    return;
+  }
+
+  if (event.key === 'Delete') {
+    event.preventDefault();
+    handleDeleteKey();
+  } else if ((event.ctrlKey || event.metaKey) && event.key === 'c') {
+    event.preventDefault();
+    handleCopy();
+  } else if ((event.ctrlKey || event.metaKey) && event.key === 'v') {
+    event.preventDefault();
+    handlePaste();
+  }
+};
+
+const handleMouseUp = () => {
+  isDragging.value = false;
+};
+
+onMounted(() => {
+  window.addEventListener('mouseup', handleMouseUp);
+});
+
+onUnmounted(() => {
+  window.removeEventListener('mouseup', handleMouseUp);
+});
 
 const objectType = computed(() => {
   const filter = uiStore.objectListFilter;
@@ -152,7 +211,7 @@ const objectType = computed(() => {
   return { type: 'table', icon: TableOutlined, name: '表' };
 });
 
-const filteredObjects = computed(() => {
+const allObjects = computed(() => {
   if (!targetDB.value) return [];
   const { connectionId, dbName } = targetDB.value;
   const details = connectionStore.connectionDetails[connectionId];
@@ -167,6 +226,15 @@ const filteredObjects = computed(() => {
     }
     return obj;
   });
+});
+
+const filteredObjects = computed(() => {
+    if (!searchText.value) {
+        return allObjects.value;
+    }
+    return allObjects.value.filter(obj =>
+        obj.name.toLowerCase().includes(searchText.value.toLowerCase())
+    );
 });
 
 const columns = computed(() => {
@@ -198,31 +266,6 @@ const formatBytes = (bytes) => {
 
 const customRow = (record) => {
   return {
-    onClick: (event) => {
-      const key = record.name;
-      if (event.ctrlKey || event.metaKey) {
-        if (selectedRowKeys.value.includes(key)) {
-          selectedRowKeys.value = selectedRowKeys.value.filter(k => k !== key);
-        } else {
-          selectedRowKeys.value.push(key);
-        }
-      } else if (event.shiftKey) {
-        const lastIndex = filteredObjects.value.findIndex(t => t.name === lastSelectedRowKey);
-        const currentIndex = filteredObjects.value.findIndex(t => t.name === key);
-        if (lastIndex !== -1) {
-          const start = Math.min(lastIndex, currentIndex);
-          const end = Math.max(lastIndex, currentIndex);
-          const rangeKeys = filteredObjects.value.slice(start, end + 1).map(t => t.name);
-          const newKeys = [...new Set([...selectedRowKeys.value, ...rangeKeys])];
-          selectedRowKeys.value = newKeys;
-        } else {
-          selectedRowKeys.value = [key];
-        }
-      } else {
-        selectedRowKeys.value = [key];
-      }
-      lastSelectedRowKey = key;
-    },
     onDblclick: () => {
       if (objectType.value.type === 'table' || objectType.value.type === 'view') {
         uiStore.openDataTab({
@@ -233,6 +276,67 @@ const customRow = (record) => {
         });
       }
     },
+    onMousedown: (event) => {
+      event.preventDefault();
+      isDragging.value = true;
+      hasDragged.value = false;
+      const key = record.name;
+
+      if (event.shiftKey && lastSelectedRowKey) {
+        isDragging.value = false; // No drag with modifiers
+        const lastIndex = filteredObjects.value.findIndex(t => t.name === lastSelectedRowKey);
+        const currentIndex = filteredObjects.value.findIndex(t => t.name === key);
+        if (lastIndex !== -1) {
+          const start = Math.min(lastIndex, currentIndex);
+          const end = Math.max(lastIndex, currentIndex);
+          const rangeKeys = filteredObjects.value.slice(start, end + 1).map(t => t.name);
+          const newKeys = new Set(selectedRowKeys.value);
+          rangeKeys.forEach(k => newKeys.add(k));
+          selectedRowKeys.value = Array.from(newKeys);
+        }
+      } else if (event.ctrlKey || event.metaKey) {
+        isDragging.value = false; // No drag with modifiers
+        if (selectedRowKeys.value.includes(key)) {
+          selectedRowKeys.value = selectedRowKeys.value.filter(k => k !== key);
+        } else {
+          selectedRowKeys.value.push(key);
+        }
+      } else {
+        // No modifiers. Prepare for drag.
+        if (selectedRowKeys.value.includes(key)) {
+          dragMode.value = 'remove';
+        } else {
+          dragMode.value = 'add';
+          selectedRowKeys.value = [key];
+        }
+      }
+      lastSelectedRowKey = key;
+      rootDivRef.value?.focus();
+    },
+    onMouseenter: () => {
+      if (isDragging.value) {
+        hasDragged.value = true;
+        const key = record.name;
+        if (dragMode.value === 'add') {
+          if (!selectedRowKeys.value.includes(key)) {
+            selectedRowKeys.value.push(key);
+          }
+        } else { // 'remove'
+          if (selectedRowKeys.value.includes(key)) {
+            selectedRowKeys.value = selectedRowKeys.value.filter(k => k !== key);
+          }
+        }
+      }
+    },
+    onMouseup: () => {
+      if (isDragging.value && !hasDragged.value) {
+        const key = record.name;
+        if (dragMode.value === 'remove') {
+          selectedRowKeys.value = [key];
+        }
+      }
+      rootDivRef.value?.focus();
+    }
   };
 };
 
@@ -331,15 +435,12 @@ const handlePaste = () => {
 
 const handleDeleteKey = () => {
   if (selectedRowKeys.value.length > 0) {
-    const selectedRecords = filteredObjects.value.filter(t => selectedRowKeys.value.includes(t.name));
-    const nodes = selectedRecords.map(record => ({
-      type: objectType.value.type,
-      table: record.name,
-      database: targetDB.value.dbName,
-      connectionId: targetDB.value.connectionId,
-      ...record
-    }));
-    confirmDeleteTable(nodes);
+    const firstSelectedKey = selectedRowKeys.value[0];
+    const record = filteredObjects.value.find(t => t.name === firstSelectedKey);
+    if (record) {
+      const nodes = getSelectedNodes(record);
+      confirmDeleteTable(nodes);
+    }
   }
 };
 
@@ -476,8 +577,19 @@ const confirmDeleteTable = (nodes) => {
   align-items: center;
   height: 100%;
 }
+.list-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+.list-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  padding-bottom: 8px;
+}
 :deep(.ant-table-row) {
   cursor: pointer;
+  user-select: none;
 }
 .ddl-textarea {
   font-family: "Monaco", "Menlo", "Ubuntu Mono", monospace;
