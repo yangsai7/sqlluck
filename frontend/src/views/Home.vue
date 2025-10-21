@@ -102,7 +102,7 @@
                 :database="tab.database"
                 :table="tab.table"
               />
-
+              <ChatQuery v-if="tab.type === 'chat-query'" />
               <TableEditor
                 v-if="tab.type === 'structure' || tab.type === 'new_table'"
                 :mode="tab.type === 'new_table' ? 'create' : 'edit'"
@@ -149,6 +149,7 @@ import TableEditor from '@/components/TableEditor.vue'
 import ImportExportDialog from '@/components/ImportExportDialog.vue'
 import ObjectList from '@/components/ObjectList.vue'
 import PerformanceMonitor from '@/views/PerformanceMonitor.vue'
+import ChatQuery from '@/views/ChatQuery.vue'
 
 const connectionStore = useConnectionStore()
 const uiStore = useUIStore()

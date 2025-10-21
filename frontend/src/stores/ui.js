@@ -5,6 +5,7 @@ import { useConnectionStore } from './connection'
 import { message } from 'ant-design-vue'
 
 let queryTabCounter = 1;
+let chatTabCounter = 1;
 
 export const useUIStore = defineStore('ui', {
   state: () => ({
@@ -124,6 +125,17 @@ export const useUIStore = defineStore('ui', {
         connectionId,
         database: dbName,
         sql
+      });
+      this.activeMainTab = tabName;
+    },
+
+    openChatQueryTab() {
+      const tabName = `chat-query-${chatTabCounter++}`;
+      const tabLabel = `Chat Query ${chatTabCounter - 1}`;
+      this.dataTabs.push({
+        name: tabName,
+        label: tabLabel,
+        type: 'chat-query',
       });
       this.activeMainTab = tabName;
     },

@@ -144,4 +144,23 @@ export const performanceAPI = {
   }
 }
 
+const LLM_CONFIG_KEY = 'llm_config';
+
+function getLlmConfigFromLocalStorage() {
+  const savedConfig = localStorage.getItem(LLM_CONFIG_KEY);
+  if (savedConfig) {
+    return JSON.parse(savedConfig);
+  }
+  return null;
+}
+
+// 聊天API
+export const chatAPI = {
+  // 发送消息
+  sendMessage(conversationHistory, connectionId, database) {
+    const llmConfig = getLlmConfigFromLocalStorage();
+    return api.post('/chat', { conversationHistory, llmConfig, connectionId, database });
+  }
+};
+
 export default api

@@ -7,6 +7,8 @@ const QueryController = require('../controllers/QueryController');
 const PerformanceController = require('../controllers/PerformanceController');
 const ImportExportController = require('../controllers/ImportExportController');
 
+const ChatController = require('../controllers/ChatController');
+
 const router = express.Router();
 
 // 配置文件上传
@@ -78,5 +80,7 @@ router.post('/connections/:connectionId/execute-sql-file', ImportExportControlle
 // 文件上传下载路由
 router.post('/upload', upload.single('file'), ImportExportController.uploadFile);
 router.get('/download/:filename', ImportExportController.downloadFile);
+
+router.post('/chat', ChatController.handleChatMessage);
 
 module.exports = router;

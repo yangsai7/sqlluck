@@ -2,6 +2,8 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
 import Home from '@/views/Home.vue'
 
+import ChatQuery from '@/views/ChatQuery.vue'
+
 const routes = [
   {
     path: '/',
@@ -9,6 +11,14 @@ const routes = [
     component: Home,
     meta: {
       title: 'sqlluck'
+    }
+  },
+  {
+    path: '/chat-query',
+    name: 'ChatQuery',
+    component: ChatQuery,
+    meta: {
+      title: 'Chat Query'
     }
   }
 ]

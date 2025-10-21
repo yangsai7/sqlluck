@@ -32,7 +32,16 @@
       <template #icon><DashboardOutlined /></template>
       性能监控
     </a-button>
+    <a-button type="text" size="large" @click="handleMenuClick('chat-query')">
+      <template #icon><CommentOutlined /></template>
+      ChatQuery
+    </a-button>
+    <a-button type="text" size="large" @click="handleMenuClick('configure-llm')">
+      <template #icon><SettingOutlined /></template>
+      配置LLM
+    </a-button>
     <ConnectionDialog v-model:visible="showConnectionDialog" @connected="handleConnected" />
+    <LlmConfigDialog v-model:visible="showLlmConfigDialog" />
   </div>
 </template>
 
@@ -51,8 +60,11 @@ import {
   BarChartOutlined,
   TableOutlined,
   DashboardOutlined,
+  CommentOutlined,
+  SettingOutlined,
 } from '@ant-design/icons-vue';
 import ConnectionDialog from './ConnectionDialog.vue';
+import LlmConfigDialog from './LlmConfigDialog.vue';
 import { useUIStore } from '@/stores/ui';
 import { useConnectionStore } from '@/stores/connection';
 import { message } from 'ant-design-vue';
@@ -61,6 +73,7 @@ const router = useRouter();
 const uiStore = useUIStore();
 const connectionStore = useConnectionStore();
 const showConnectionDialog = ref(false);
+const showLlmConfigDialog = ref(false);
 
 const handleMenuClick = (action) => {
   if (action === 'new-connection') {
@@ -74,6 +87,10 @@ const handleMenuClick = (action) => {
     } else {
       message.info('请先选择一个数据库连接');
     }
+  } else if (action === 'chat-query') {
+    uiStore.openChatQueryTab();
+  } else if (action === 'configure-llm') {
+    showLlmConfigDialog.value = true;
   } else if (['tables', 'views', 'procedures'].includes(action)) {
     uiStore.setObjectListFilter(action);
     uiStore.setActiveMainTab('objects');
