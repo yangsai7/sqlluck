@@ -3,7 +3,7 @@
     <div v-if="!targetDB" class="no-selection">
       <a-empty description="在左侧双击一个数据库以查看其对象" />
     </div>
-    <div v-else class="list-container">
+    <div v-else class="list-container" @click.self="clearSelection">
       <div class="list-toolbar">
         <a-input-search
           ref="searchInputRef"
@@ -160,6 +160,11 @@ const hasDragged = ref(false);
 
 const focusSearch = () => {
   searchInputRef.value?.focus();
+};
+
+const clearSelection = () => {
+  selectedRowKeys.value = [];
+  lastSelectedRowKey = null;
 };
 
 const handleKeyDown = (event) => {
