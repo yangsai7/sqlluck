@@ -1,6 +1,6 @@
 <template>
-  <div class="table-data-view">
-    <div class="data-toolbar">
+  <div ref="rootDivRef" class="table-data-view">
+    <div class="data-toolbar" @click="handleToolbarClick">
       <div class="toolbar-left">
         <a-button type="primary" size="small" @click="handleAdd">
           <template #icon><PlusOutlined /></template>
@@ -91,7 +91,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, computed, watch, nextTick } from 'vue'
+import { ref, reactive, onMounted, onUnmounted, computed, watch, nextTick } from 'vue'
 import { message, Modal } from 'ant-design-vue'
 import { PlusOutlined, SyncOutlined, DeleteOutlined, SaveOutlined } from '@ant-design/icons-vue'
 import { useQueryStore } from '@/stores/query'
@@ -104,6 +104,7 @@ const props = defineProps({
 
 const queryStore = useQueryStore()
 
+const rootDivRef = ref(null);
 const loading = ref(false)
 const tableData = ref([])
 const originalTableData = ref([]) // Pristine copy of data
@@ -118,6 +119,10 @@ const searchText = ref('')
 const selectedRowKeys = ref([])
 const lastSelectedRowKey = ref(null)
 const isBatchDeleting = ref(false)
+
+const isDragging = ref(false);
+const dragMode = ref('add');
+const hasDragged = ref(false);
 
 // Inline editing state
 const editingCellKey = ref(null); // format: `${recordKey}-${columnKey}`
@@ -154,6 +159,57 @@ const getRowKey = (record) => {
   return primaryKey.value ? record[primaryKey.value] : undefined;
 };
 
+const clearSelection = () => {
+  selectedRowKeys.value = [];
+  lastSelectedRowKey.value = null;
+};
+
+const handleToolbarClick = (event) => {
+  if (event.target === event.currentTarget) {
+    clearSelection();
+  }
+};
+
+const handleGlobalMouseDown = (event) => {
+  if (event.button === 0) {
+    hasDragged.value = false;
+  }
+};
+
+const handleClickOutside = (event) => {
+  if (hasDragged.value) {
+    return;
+  }
+  if (!rootDivRef.value || !rootDivRef.value.contains(event.target)) {
+    return;
+  }
+
+  const toolbar = event.target.closest('.data-toolbar');
+  const pagination = event.target.closest('.ant-pagination');
+  const row = event.target.closest('tr.ant-table-row');
+
+  if (!row && !toolbar && !pagination) {
+    clearSelection();
+  }
+};
+
+const handleMouseUp = () => {
+  isDragging.value = false;
+};
+
+onMounted(() => {
+  window.addEventListener('mousedown', handleGlobalMouseDown, true);
+  window.addEventListener('mouseup', handleMouseUp);
+  window.addEventListener('click', handleClickOutside, true);
+  loadData();
+});
+
+onUnmounted(() => {
+  window.removeEventListener('mousedown', handleGlobalMouseDown, true);
+  window.removeEventListener('mouseup', handleMouseUp);
+  window.removeEventListener('click', handleClickOutside, true);
+});
+
 const handleResizeColumn = (w, col) => {
   columnWidths.value[col.key] = w
 }
@@ -169,49 +225,73 @@ const rowClassName = (record) => {
 
 const customRow = (record) => {
   return {
-    onClick: (event) => {
-      const key = getRowKey(record);
-      if (!key) return;
-
-      // Do not trigger row selection if the click is on an input inside the cell
+    onMousedown: (event) => {
       if (event.target.tagName === 'INPUT') {
         return;
       }
-
-      const currentKeys = [...selectedRowKeys.value];
-      const data = filteredData.value;
-      const allKeys = data.map(r => getRowKey(r));
+      
+      isDragging.value = true;
+      // hasDragged is reset by global mousedown
+      const key = getRowKey(record);
+      if (!key) return;
 
       if (event.shiftKey && lastSelectedRowKey.value) {
+        isDragging.value = false; // No drag with modifiers
+        const data = filteredData.value;
+        const allKeys = data.map(r => getRowKey(r));
         const lastIndex = allKeys.indexOf(lastSelectedRowKey.value);
         const currentIndex = allKeys.indexOf(key);
-        if (lastIndex === -1 || currentIndex === -1) {
-            selectedRowKeys.value = [key];
-        } else {
-            const start = Math.min(lastIndex, currentIndex);
-            const end = Math.max(lastIndex, currentIndex);
-            const keysToSelect = allKeys.slice(start, end + 1);
-            selectedRowKeys.value = [...new Set([...currentKeys, ...keysToSelect])];
+        if (lastIndex !== -1 && currentIndex !== -1) {
+          const start = Math.min(lastIndex, currentIndex);
+          const end = Math.max(lastIndex, currentIndex);
+          const rangeKeys = allKeys.slice(start, end + 1);
+          const newKeys = new Set(selectedRowKeys.value);
+          rangeKeys.forEach(k => newKeys.add(k));
+          selectedRowKeys.value = Array.from(newKeys);
         }
       } else if (event.ctrlKey || event.metaKey) {
-        const index = currentKeys.indexOf(key);
-        if (index > -1) {
-          currentKeys.splice(index, 1);
+        isDragging.value = false; // No drag with modifiers
+        if (selectedRowKeys.value.includes(key)) {
+          selectedRowKeys.value = selectedRowKeys.value.filter(k => k !== key);
         } else {
-          currentKeys.push(key);
+          selectedRowKeys.value.push(key);
         }
-        selectedRowKeys.value = currentKeys;
-        lastSelectedRowKey.value = key;
       } else {
-        if (currentKeys.length === 1 && currentKeys[0] === key) {
-            selectedRowKeys.value = [];
-            lastSelectedRowKey.value = null;
+        if (selectedRowKeys.value.includes(key)) {
+          dragMode.value = 'remove';
         } else {
-            selectedRowKeys.value = [key];
-            lastSelectedRowKey.value = key;
+          dragMode.value = 'add';
+          selectedRowKeys.value = [key];
+        }
+      }
+      lastSelectedRowKey.value = key;
+    },
+    onMouseenter: () => {
+      if (isDragging.value) {
+        hasDragged.value = true;
+        const key = getRowKey(record);
+        if (!key) return;
+
+        if (dragMode.value === 'add') {
+          if (!selectedRowKeys.value.includes(key)) {
+            selectedRowKeys.value.push(key);
+          }
+        } else { // 'remove'
+          if (selectedRowKeys.value.includes(key)) {
+            selectedRowKeys.value = selectedRowKeys.value.filter(k => k !== key);
+          }
         }
       }
     },
+    onMouseup: () => {
+      if (isDragging.value && !hasDragged.value) {
+        const key = getRowKey(record);
+        if (!key) return;
+        if (dragMode.value === 'remove') {
+          selectedRowKeys.value = [key];
+        }
+      }
+    }
   };
 };
 
@@ -393,9 +473,11 @@ const loadData = async () => {
       fields.value = result.fields || []
       total.value = result.total || 0
     }
-  } catch (error) {
+  }
+  catch (error) {
     message.error(`加载数据失败: ${error.message}`)
-  } finally {
+  }
+  finally {
     loading.value = false
   }
 }
@@ -439,7 +521,9 @@ const handleBatchDelete = async () => {
         await queryStore.deleteData(props.connectionId, props.database, props.table, whereClause)
         message.success('批量删除成功')
         loadData()
-      } catch (error) { message.error(`批量删除失败: ${error.message}`) } finally { isBatchDeleting.value = false }
+      }
+      catch (error) { message.error(`批量删除失败: ${error.message}`) }
+      finally { isBatchDeleting.value = false }
     }
   })
 }
@@ -461,8 +545,6 @@ const buildWhereClause = (record) => {
     .join(' AND ')
 }
 
-onMounted(loadData)
-
 watch(() => [props.connectionId, props.database, props.table], () => {
   currentPage.value = 1
   loadData()
@@ -470,7 +552,7 @@ watch(() => [props.connectionId, props.database, props.table], () => {
 </script>
 
 <style scoped>
-.table-data-view { height: 100%; display: flex; flex-direction: column; }
+.table-data-view { height: 100%; display: flex; flex-direction: column; } 
 .data-toolbar { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; flex-shrink: 0; }
 .toolbar-left, .toolbar-right { display: flex; align-items: center; gap: 8px; }
 .execute-time { font-size: 12px; color: #888; margin-right: 16px; }
@@ -480,6 +562,7 @@ watch(() => [props.connectionId, props.database, props.table], () => {
 
 :deep(.ant-table-row) {
   cursor: pointer;
+  user-select: none;
 }
 
 :deep(.row-selected > td) {
