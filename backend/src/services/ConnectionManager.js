@@ -85,6 +85,30 @@ class ConnectionManager {
         return this.connections.get(id);
     }
 
+    async getActiveConnection(id) {
+        let connection = this.connections.get(id);
+        if (connection) {
+            const testResult = await connection.testConnection();
+            if (testResult.success) {
+                return { success: true, connection };
+            }
+        }
+
+        // If connection doesn't exist or test failed, try to reconnect
+        const reconnectResult = await this.connect(id);
+        if (reconnectResult.success) {
+            connection = this.connections.get(id);
+            if (connection) {
+                return { success: true, connection };
+            }
+        }
+        
+        return { 
+            success: false, 
+            error: '连接不存在或已断开，自动重连失败: ' + (reconnectResult.error || '未知错误')
+        };
+    }
+
     // 测试连接
     async testConnection(config) {
         try {
