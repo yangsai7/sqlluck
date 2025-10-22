@@ -70,3 +70,11 @@ mysql-client-app/
 | 自然语言查询 | “查询过去 7 天注册用户数量” → 自动生成 SQL 并执行 |
 | SQL 优化建议 | 分析慢查询并给出索引优化建议 |
 | 查询总结 | 自动生成查询结果的业务摘要（如销售趋势、统计对比） |
+
+# 项目截图
+
+![项目截图](docs/images/eg1.png)
+![项目截图](docs/images/eg2.png)
+![项目截图](docs/images/eg3.png)
+![项目截图](docs/images/eg4.png)
+![项目截图](docs/images/eg5.png)
