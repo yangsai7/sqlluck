@@ -164,6 +164,14 @@ const sendMessage = async () => {
   }
 };
 
+const scrollToBottom = () => {
+  nextTick(() => {
+    if (messagesArea.value) {
+      messagesArea.value.scrollTop = messagesArea.value.scrollHeight;
+    }
+  });
+};
+
 // Close EventSource on component unmount if it's still open
 onUnmounted(() => {
   if (eventSource.value) {
