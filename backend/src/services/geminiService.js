@@ -1,4 +1,4 @@
-const axios = require('axios');
+const axios = require('axios/dist/node/axios.cjs'); //写死node路径，否则pkg打包容易出问题
 const MySQLFunctionService = require('./MySQLFunctionService');
 const ConnectionManager = require('./ConnectionManager');
 

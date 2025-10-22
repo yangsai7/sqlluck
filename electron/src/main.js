@@ -97,7 +97,7 @@ function startBackendService() {
     const args = [`--appdata=${userDataPath}`];
     backendProcess = spawn(backendPath, args, {
       //stdio: ['inherit'], // pipe stdout and stderr
-      stdio: ['pipe', 'pipe', 'pipe'],
+      stdio: ['pipe', 'pipe', 'pipe'], //["inherit"]
       env: { 
         ...process.env, 
         PORT: '3001',
