@@ -37,7 +37,9 @@ AI 支持 OpenAI API / 自建大模型接口
 
 # 安装依赖
 
+```
 npm install
+```
 
 # 启动测试环境
 
