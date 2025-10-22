@@ -1,4 +1,5 @@
 // Express应用主入口
+const http = require('http');
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
@@ -7,6 +8,7 @@ const path = require('path');
 
 const apiRoutes = require('./routes/api');
 const connectionManager = require('./services/ConnectionManager');
+const { maxHeaderSize } = require('http');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -85,11 +87,14 @@ process.on('SIGTERM', async () => {
     }
 });
 
-// 启动服务器
-app.listen(PORT, () => {
+const server = http.createServer({
+  maxHeaderSize: 100 * 1024*1024, // 100MB
+}, app);
+
+server.listen(PORT, () => {
     console.log(`sqlluck后端服务已启动，端口: ${PORT}`);
     console.log(`健康检查: http://localhost:${PORT}/health`);
     console.log(`API文档: http://localhost:${PORT}/api`);
-});
+})
 
 module.exports = app;
