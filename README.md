@@ -54,12 +54,15 @@ npm run build
 npm start
 
 📁 项目结构
+
+```
 mysql-client-app/
 ├── backend/ # Node.js 后端服务（AI Query、SQL 执行接口）
 ├── frontend/ # Vue.js 前端界面
 ├── electron/ # Electron 主进程
 ├── docs/ # 文档与截图
 └── package.json # 项目配置
+```
 
 🧠 AI Query 功能示例
 | 功能 | 示例 |
