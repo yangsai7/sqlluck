@@ -157,9 +157,30 @@ function getLlmConfigFromLocalStorage() {
 // 聊天API
 export const chatAPI = {
   // 发送消息
-  sendMessage(conversationHistory, connectionId, database) {
+  sendMessage(conversationHistory, connectionId, database, onEvent) {
     const llmConfig = getLlmConfigFromLocalStorage();
-    return api.post('/chat', { conversationHistory, llmConfig, connectionId, database });
+
+    // Encode parameters for URL
+    const params = new URLSearchParams();
+    params.append('conversationHistory', JSON.stringify(conversationHistory));
+    params.append('llmConfig', JSON.stringify(llmConfig));
+    params.append('connectionId', connectionId);
+    params.append('database', database);
+
+    const eventSource = new EventSource(`${api.defaults.baseURL}/chat?${params.toString()}`);
+
+    eventSource.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      onEvent(data);
+    };
+
+    eventSource.onerror = (error) => {
+      console.error('EventSource error:', error);
+      eventSource.close();
+      onEvent({ type: 'error', error: 'Stream connection error.' });
+    };
+
+    return eventSource; // Return the EventSource instance for manual closing if needed
   }
 };
 

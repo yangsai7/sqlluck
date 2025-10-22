@@ -30,8 +30,14 @@
           <div v-else-if="message.role === 'assistant' && message.tool_calls && message.tool_calls.length > 0" class="tool-call-request">
             <p><strong>AI requested tool call:</strong></p>
             <div v-for="(toolCall, tcIndex) in message.tool_calls" :key="tcIndex">
-              <p><strong>Tool:</strong> {{ toolCall.function.name }}</p>
-              <p><strong>Arguments:</strong> <pre>{{ JSON.stringify(JSON.parse(toolCall.function.arguments), null, 2) }}</pre></p>
+              <template v-if="toolCall.function">
+                <p><strong>Tool:</strong> {{ toolCall.function.name }}</p>
+                <p><strong>Arguments:</strong> <pre>{{ toolCall.function.arguments ? JSON.stringify(JSON.parse(toolCall.function.arguments), null, 2) : '' }}</pre></p>
+              </template>
+              <template v-else>
+                <p><strong>Tool:</strong> Unknown</p>
+                <p><strong>Arguments:</strong> <pre>N/A</pre></p>
+              </template>
             </div>
           </div>
           <div v-else-if="message.role === 'assistant'" v-html="renderAssistantContent(message.content)"></div>
@@ -55,7 +61,7 @@
 </template>
 
 <script setup>
-import { ref, nextTick, onMounted, watch } from 'vue';
+import { ref, nextTick, onMounted, watch, onUnmounted } from 'vue';
 import { chatAPI } from '../api';
 import MarkdownIt from 'markdown-it';
 import { useConnectionStore } from '@/stores/connection';
@@ -68,6 +74,7 @@ const messages = ref([]);
 const userInput = ref('');
 const isLoading = ref(false);
 const messagesArea = ref(null);
+const eventSource = ref(null); // Declare eventSource as a ref
 
 const selectedConnectionId = ref(null);
 const selectedDatabaseName = ref(null);
@@ -87,8 +94,17 @@ watch(selectedConnectionId, (newVal) => {
   }
 });
 
-const handleConnectionChange = (connId) => {
+const handleConnectionChange = async (connId) => {
   selectedConnectionId.value = connId;
+  if (connId) {
+    try {
+      await connectionStore.setActiveConnection(connId);
+      await connectionStore.loadDatabases();
+    } catch (error) {
+      message.error(`连接失败: ${error.message}`);
+      console.error('Failed to set active connection or load databases:', error);
+    }
+  }
 };
 
 const sendMessage = async () => {
@@ -102,37 +118,58 @@ const sendMessage = async () => {
   }
 
   const userMessage = { role: 'user', content: userInput.value };
-  // Temporarily add user message for display, but send a copy of current history to backend
   messages.value.push(userMessage);
   isLoading.value = true;
   userInput.value = '';
 
+  // Filter out the system message from the history sent to the backend
+  const conversationHistoryToSend = messages.value.filter(msg => msg.role !== 'loading');
+
   try {
-    // Send the current messages array (including the new user message) to the backend
-    const response = await chatAPI.sendMessage(
-      messages.value.filter(msg => msg.role !== 'loading'), // Ensure no loading messages are sent
+    eventSource.value = chatAPI.sendMessage(
+      conversationHistoryToSend,
       selectedConnectionId.value,
-      selectedDatabaseName.value
+      selectedDatabaseName.value,
+      (event) => {
+        if (event.type === 'message') {
+          // For message events, add to the messages array
+          messages.value.push(event.message);
+        } else if (event.type === 'status') {
+          // For status events, log them or display in a status bar
+          console.log('Backend Status:', event.message);
+        } else if (event.type === 'error') {
+          // Handle errors from the stream
+          console.error('Stream error:', event.error);
+          const errorMessage = { role: 'assistant', content: `抱歉，出错了: ${event.error}` };
+          messages.value.push(errorMessage);
+          isLoading.value = false;
+          if (eventSource.value) eventSource.value.close();
+        } else if (event.type === 'end') {
+          // Stream ended, finalize loading state
+          isLoading.value = false;
+          if (eventSource.value) eventSource.value.close();
+        }
+        scrollToBottom();
+      }
     );
-    // Update the entire messages history with what the backend returns
-    messages.value = response.conversationHistory.filter(msg => msg.role !== 'system');
   } catch (error) {
-    console.error('Error sending message:', error);
+    console.error('Error setting up stream:', error);
     const errorMessage = { role: 'assistant', content: '抱歉，出错了，请稍后再试。' };
     messages.value.push(errorMessage);
-  } finally {
     isLoading.value = false;
-    scrollToBottom();
+    if (eventSource.value) eventSource.value.close();
+  } finally {
+    // isLoading.value is set to false when 'end' event is received
+    // or on error
   }
 };
 
-const scrollToBottom = () => {
-  nextTick(() => {
-    if (messagesArea.value) {
-      messagesArea.value.scrollTop = messagesArea.value.scrollHeight;
-    }
-  });
-};
+// Close EventSource on component unmount if it's still open
+onUnmounted(() => {
+  if (eventSource.value) {
+    eventSource.value.close();
+  }
+});
 
 const isTabularData = (str) => {
   try {

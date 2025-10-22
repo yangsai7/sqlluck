@@ -81,6 +81,6 @@ router.post('/connections/:connectionId/execute-sql-file', ImportExportControlle
 router.post('/upload', upload.single('file'), ImportExportController.uploadFile);
 router.get('/download/:filename', ImportExportController.downloadFile);
 
-router.post('/chat', ChatController.handleChatMessage);
+router.get('/chat', ChatController.handleChatMessage);
 
 module.exports = router;

@@ -7,7 +7,7 @@ class GeminiService {
     this.mySQLFunctionService = new MySQLFunctionService();
   }
 
-  async generateContent(conversationHistory, llmConfig, connectionId, database) {
+  async generateContent(conversationHistory, llmConfig, connectionId, database, sendEvent) {
     if (!llmConfig || !llmConfig.apiAddress || !llmConfig.apiKey) {
       throw new Error('LLM API address or API key is not configured.');
     }
@@ -92,9 +92,9 @@ class GeminiService {
 
     try {
       let currentMessages = [...messages]; // Create a mutable copy of messages
-      let finalContent = null;
 
       while (toolCallTurns < MAX_TOOL_CALL_TURNS) {
+        sendEvent({ type: 'status', message: 'Thinking...' });
         let response = await axios.post(apiAddress, {
           model: "gpt-4o-mini",
           messages: currentMessages,
@@ -109,10 +109,14 @@ class GeminiService {
         let firstChoice = response.data.choices[0];
 
         if (firstChoice.message && firstChoice.message.content) {
-          finalContent = firstChoice.message.content;
-          break; // AI provided a text response, exit loop
+          // AI provided a text response, send it and exit loop
+          currentMessages.push({ role: "assistant", content: firstChoice.message.content });
+          sendEvent({ type: 'message', message: { role: "assistant", content: firstChoice.message.content } });
+          sendEvent({ type: 'history', history: currentMessages.filter(msg => msg.role !== 'system') });
+          break; 
         } else if (firstChoice.message && firstChoice.message.tool_calls && firstChoice.message.tool_calls.length > 0) {
           // AI wants to call a tool
+          sendEvent({ type: 'status', message: 'AI requested tool call.' });
           const { success, error } = await ConnectionManager.getActiveConnection(connectionId);
           if (!success) {
             throw new Error(`Failed to activate connection ${connectionId}: ${error}`);
@@ -121,6 +125,10 @@ class GeminiService {
           const toolCall = firstChoice.message.tool_calls[0];
           const functionName = toolCall.function.name;
           const functionArgs = JSON.parse(toolCall.function.arguments);
+
+          // Send the AI's tool call request to the frontend
+          currentMessages.push(firstChoice.message);
+          sendEvent({ type: 'message', message: firstChoice.message });
 
           // Execute the function
           let argsArray = [connectionId, database];
@@ -133,32 +141,31 @@ class GeminiService {
           }
 
           console.log("开始执行tool function:", functionName);
+          sendEvent({ type: 'status', message: `Executing tool: ${functionName}` });
           const functionOutput = await this.mySQLFunctionService.executeFunction(
             functionName,
             argsArray
           );
           console.log("Tool function output:", functionOutput); // Log the output
 
-          // Add the AI's tool_calls message and the tool's output to the messages history
-          currentMessages.push(firstChoice.message);
-          currentMessages.push({
+          // Add the tool's output to the messages history and send to frontend
+          const toolOutputMessage = {
             role: "tool",
             tool_call_id: toolCall.id,
             name: functionName,
-            content: JSON.stringify(functionOutput) // This is where the tool output is set
-          });
+            content: JSON.stringify(functionOutput)
+          };
+          currentMessages.push(toolOutputMessage);
+          sendEvent({ type: 'message', message: toolOutputMessage });
+          
           toolCallTurns++;
         } else {
           throw new Error('Invalid response from AI proxy: No content or tool call found in AI message.');
         }
       }
 
-      if (finalContent) {
-        // The final content is the AI's text response
-        currentMessages.push({ role: "assistant", content: finalContent });
-        return { content: finalContent, conversationHistory: currentMessages };
-      } else {
-        throw new Error('AI did not provide a final text response after multiple tool calls.');
+      if (toolCallTurns >= MAX_TOOL_CALL_TURNS) {
+        throw new Error('AI reached maximum tool call turns without providing a final text response.');
       }
 
     } catch (error) {
