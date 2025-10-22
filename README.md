@@ -50,6 +50,7 @@ mysql-client-app/
 
 ## 项目截图
 
+![项目截图](docs/images/eg4.png)
 ![项目截图](docs/images/eg1.png)
 ![项目截图](docs/images/eg2.png)
 ![项目截图](docs/images/eg3.png)
