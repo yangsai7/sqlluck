@@ -27,7 +27,18 @@
       <div v-for="(message, index) in messages" :key="index" class="message" :class="message.role">
         <div class="message-content">
           <p v-if="message.role === 'user'">{{ message.content }}</p>
-          <div v-else v-html="message.content"></div>
+          <div v-else-if="message.role === 'assistant' && message.tool_calls && message.tool_calls.length > 0" class="tool-call-request">
+            <p><strong>AI requested tool call:</strong></p>
+            <div v-for="(toolCall, tcIndex) in message.tool_calls" :key="tcIndex">
+              <p><strong>Tool:</strong> {{ toolCall.function.name }}</p>
+              <p><strong>Arguments:</strong> <pre>{{ JSON.stringify(JSON.parse(toolCall.function.arguments), null, 2) }}</pre></p>
+            </div>
+          </div>
+          <div v-else-if="message.role === 'assistant'" v-html="renderAssistantContent(message.content)"></div>
+          <div v-else-if="message.role === 'tool'" class="tool-message">
+            <p><strong>Tool Executed:</strong> {{ message.name }}</p>
+            <p><strong>Output:</strong> <pre>{{ message.content }}</pre></p>
+          </div>
         </div>
       </div>
       <div v-if="isLoading" class="message assistant">
@@ -91,21 +102,20 @@ const sendMessage = async () => {
   }
 
   const userMessage = { role: 'user', content: userInput.value };
+  // Temporarily add user message for display, but send a copy of current history to backend
   messages.value.push(userMessage);
   isLoading.value = true;
   userInput.value = '';
 
   try {
-    // Filter out the loading message if it's there, and send the actual conversation history
-    const conversationHistory = messages.value.filter(msg => msg.role !== 'loading');
-
+    // Send the current messages array (including the new user message) to the backend
     const response = await chatAPI.sendMessage(
-      conversationHistory,
+      messages.value.filter(msg => msg.role !== 'loading'), // Ensure no loading messages are sent
       selectedConnectionId.value,
       selectedDatabaseName.value
     );
-    const assistantMessage = { role: 'assistant', content: md.render(response.content) };
-    messages.value.push(assistantMessage);
+    // Update the entire messages history with what the backend returns
+    messages.value = response.conversationHistory.filter(msg => msg.role !== 'system');
   } catch (error) {
     console.error('Error sending message:', error);
     const errorMessage = { role: 'assistant', content: '抱歉，出错了，请稍后再试。' };
@@ -122,6 +132,51 @@ const scrollToBottom = () => {
       messagesArea.value.scrollTop = messagesArea.value.scrollHeight;
     }
   });
+};
+
+const isTabularData = (str) => {
+  try {
+    const data = JSON.parse(str);
+    return Array.isArray(data) && data.every(item => typeof item === 'object' && item !== null);
+  } catch (e) {
+    return false;
+  }
+};
+
+const generateHtmlTable = (data) => {
+  if (!data || data.length === 0) {
+    return '<p>No data to display.</p>';
+  }
+
+  const headers = Object.keys(data[0]);
+  let tableHtml = '<table class="data-table"><thead><tr>';
+  headers.forEach(header => {
+    tableHtml += `<th>${header}</th>`;
+  });
+  tableHtml += '</tr></thead><tbody>';
+
+  data.forEach(row => {
+    tableHtml += '<tr>';
+    headers.forEach(header => {
+      tableHtml += `<td>${row[header]}</td>`;
+    });
+    tableHtml += '</tr>';
+  });
+  tableHtml += '</tbody></table>';
+  return tableHtml;
+};
+
+const renderAssistantContent = (content) => {
+  // Ensure content is a string before processing
+  if (typeof content !== 'string') {
+    return String(content); // Convert to string if not already
+  }
+
+  if (isTabularData(content)) {
+    return generateHtmlTable(JSON.parse(content));
+  } else {
+    return md.render(content);
+  }
 };
 </script>
 
@@ -190,4 +245,55 @@ const scrollToBottom = () => {
   background-color: #ccc;
   cursor: not-allowed;
 }
-</style>
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 10px;
+}
+
+.data-table th,
+.data-table td {
+  border: 1px solid #ddd;
+  padding: 8px;
+  text-align: left;
+}
+
+.data-table th {
+  background-color: #f2f2f2;
+  font-weight: bold;
+}
+
+.tool-message {
+  background-color: #e6f7ff; /* Light blue background */
+  border-left: 4px solid #1890ff; /* Blue left border */
+  padding: 10px;
+  margin-top: 10px;
+  font-size: 0.9em;
+  white-space: pre-wrap; /* Preserve whitespace and wrap text */
+  word-break: break-all; /* Break long words */
+}
+
+.tool-message pre {
+  background-color: #f0f2f5;
+  padding: 5px;
+  border-radius: 4px;
+  overflow-x: auto;
+}
+
+.tool-call-request {
+  background-color: #fffbe6; /* Light yellow background */
+  border-left: 4px solid #faad14; /* Yellow left border */
+  padding: 10px;
+  margin-top: 10px;
+  font-size: 0.9em;
+  white-space: pre-wrap; /* Preserve whitespace and wrap text */
+  word-break: break-all; /* Break long words */
+}
+
+.tool-call-request pre {
+  background-color: #fff0b8;
+  padding: 5px;
+  border-radius: 4px;
+  overflow-x: auto;
+}</style>

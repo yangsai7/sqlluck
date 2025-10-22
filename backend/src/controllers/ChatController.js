@@ -9,7 +9,7 @@ class ChatController {
       }
 
       const response = await geminiService.generateContent(conversationHistory, llmConfig, connectionId, database);
-      res.json({ success: true, content: response });
+      res.json({ success: true, ...response });
     } catch (error) {
       next(error);
     }

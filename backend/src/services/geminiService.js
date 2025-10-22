@@ -20,19 +20,21 @@ class GeminiService {
         role: "system",
         content: `
         你是一个 MySQL 专家，可以使用以下工具：
-- get_table_schema(table_name): 获取指定表的结构；
+- get_table_schema(tableName): 获取指定表的结构；
 - get_all_table_schemas(): 获取所有表的结构；
 - query(sql): 执行 SQL 并返回结果。
 
 执行规则：
 1.当用户询问或要求执行 SQL 时：
-2.- 如果表名未知，请先向用户询问。
-3.- 如果表结构未知，请调用 get_table_schema 获取。
-4.当你拿到表结构后，再生成高性能、稳定可靠的 SQL。
-5.当用户只要求“生成 SQL”时，只返回 SQL 语句，不要附加解释。
-6.如果某一步出错（例如表名不存在或工具调用异常），请说明原因并提示用户如何继续。
-7.如果用户提供中文表名，你应调用 get_all_table_schemas 查找最接近的表名。
-8.如果 SQL 可以执行，请使用 query(sql) 执行并返回结果。`
+  - 如果表名未知，请先调用 get_all_table_schemas() 获取所有表名，然后向用户询问。一旦获取到表名列表，请记住它，不要重复调用此工具。
+  - 如果表结构未知，请调用 get_table_schema(tableName) 获取。一旦获取到表结构，请记住它，不要重复调用此工具。
+2.当你拿到表结构后，再生成高性能、稳定可靠的 SQL。
+3.当用户只要求“生成 SQL”时，只返回 SQL 语句，不要附加解释。
+4.如果某一步出错（例如表名不存在或工具调用异常），请说明原因并提示用户如何继续。
+5.如果用户提供中文表名，你应调用 get_all_table_schemas() 查找最接近的表名。
+6.如果 SQL 可以执行，请使用 query(sql) 执行并返回结果。
+7.如果你生成SELECT语句,必须指定limit 10,除非用户指定limit
+`
       },
       ...conversationHistory // conversationHistory should already contain user and assistant messages
     ];
@@ -135,6 +137,7 @@ class GeminiService {
             functionName,
             argsArray
           );
+          console.log("Tool function output:", functionOutput); // Log the output
 
           // Add the AI's tool_calls message and the tool's output to the messages history
           currentMessages.push(firstChoice.message);
@@ -142,7 +145,7 @@ class GeminiService {
             role: "tool",
             tool_call_id: toolCall.id,
             name: functionName,
-            content: JSON.stringify(functionOutput)
+            content: JSON.stringify(functionOutput) // This is where the tool output is set
           });
           toolCallTurns++;
         } else {
@@ -151,7 +154,9 @@ class GeminiService {
       }
 
       if (finalContent) {
-        return finalContent;
+        // The final content is the AI's text response
+        currentMessages.push({ role: "assistant", content: finalContent });
+        return { content: finalContent, conversationHistory: currentMessages };
       } else {
         throw new Error('AI did not provide a final text response after multiple tool calls.');
       }
