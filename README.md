@@ -1,56 +1,67 @@
-# MySQL Client App
+🧠 MySQL Client App
 
-一个独立的 MySQL 数据库客户端管理工具，基于 electron+vue+ts 构建(目前还有很多需要完善和优化的地方需要去做, 努力开发中)。
+一个现代化、跨平台的 MySQL 数据库客户端管理工具，基于 Electron + Vue + TypeScript 构建。
+集成了 AI 智能 SQL 助手，让数据库操作更加高效、智能。
+（项目仍在积极开发中 🚀，持续优化中！）
 
-## 特性
+✨ 主要特性
 
-- 🔗 MySQL 数据库连接管理
-- 🗂️ 数据库和表结构浏览
-- 📝 SQL 查询编辑器（语法高亮）
-- 📊 查询结果展示和数据编辑
-- 📤 数据导入导出功能
-- 🖥️ 跨平台桌面应用
+🔗 连接管理：支持多数据库连接配置与切换
 
-## 技术栈
+🗂️ 结构浏览：可视化浏览数据库、表结构与字段信息
 
-- **后端**: Node.js + Express + MySQL2
-- **前端**: Vue.js + Element Plus
-- **桌面**: Electron
-- **构建**: Vite + TypeScript
+📝 SQL 编辑器：语法高亮、自动补全、执行结果实时展示
 
-## 开发环境启动
+🧠 AI SQL 助手：
 
-```bash
+智能生成 SQL 查询语句
+
+自然语言转 SQL（输入中文问题即可生成查询）
+
+查询结果自动分析与总结
+
+📊 结果展示：支持分页、排序、筛选与数据编辑
+
+📤 数据导入导出：CSV / SQL 多格式支持
+
+🖥️ 跨平台支持：Windows / macOS / Linux 一键运行
+
+🧩 技术栈
+模块 技术
+前端 Vue 3 + Element Plus + TypeScript
+后端 Node.js + Express + MySQL2
+AI 支持 OpenAI API / 自建大模型接口
+桌面端 Electron
+构建工具 Vite
+⚙️ 开发环境启动
+
 # 安装依赖
+
 npm install
 
-# 启动开发环境
+# 启动前后端开发环境
+
 npm run dev
-```
 
-## 构建和打包
+📦 构建与打包
 
-```bash
 # 构建所有模块
+
 npm run build
 
-# 启动应用
+# 启动桌面应用
+
 npm start
-```
 
-## 项目结构
-
-```
+📁 项目结构
 mysql-client-app/
-├── backend/          # Node.js后端服务
-├── frontend/         # Vue.js前端界面
-├── electron/         # Electron主进程
-└── package.json      # 项目配置
-```
+├── backend/ # Node.js 后端服务（AI Query、SQL 执行接口）
+├── frontend/ # Vue.js 前端界面
+├── electron/ # Electron 主进程
+├── docs/ # 文档与截图
+└── package.json # 项目配置
 
-## 项目截图
-
-![项目截图](docs/images/eg4.png)
-![项目截图](docs/images/eg1.png)
-![项目截图](docs/images/eg2.png)
-![项目截图](docs/images/eg3.png)
+🧠 AI Query 功能示例
+功能 示例
+自然语言查询 “查询过去 7 天注册用户数量” → 自动生成 SQL 并执行
+SQL 优化建议 分析慢查询并给出索引优化建议
