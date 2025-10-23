@@ -87,6 +87,13 @@
         </template>
       </a-table>
     </div>
+    <div :style="{ position: 'fixed', left: `${contextMenu.x}px`, top: `${contextMenu.y}px`, zIndex: 9999 }">
+      <a-menu class="custom-context-menu" v-if="contextMenu.visible" @click="handleMenuClick" size="small" :style="{ boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)' }">
+        <a-menu-item key="copy">复制 (制表符分割)</a-menu-item>
+        <a-menu-item key="copyAsInsert">复制为 INSERT</a-menu-item>
+        <a-menu-item key="copyAsUpdate">复制为 UPDATE</a-menu-item>
+      </a-menu>
+    </div>
   </div>
 </template>
 
@@ -160,6 +167,7 @@ const getRowKey = (record) => {
 };
 
 const clearSelection = () => {
+  console.log('clearSelection called'); // Debug log
   selectedRowKeys.value = [];
   lastSelectedRowKey.value = null;
 };
@@ -177,10 +185,18 @@ const handleGlobalMouseDown = (event) => {
 };
 
 const handleClickOutside = (event) => {
+  console.log('handleClickOutside triggered'); // Debug log
   if (hasDragged.value) {
     return;
   }
   if (!rootDivRef.value || !rootDivRef.value.contains(event.target)) {
+    return;
+  }
+
+  // Check if the click target is part of the context menu
+  const contextMenuElement = document.querySelector('.custom-context-menu'); // Custom class for the context menu
+  if (contextMenuElement && contextMenuElement.contains(event.target)) {
+    console.log('Click inside custom context menu, ignoring handleClickOutside'); // Debug log
     return;
   }
 
@@ -189,6 +205,7 @@ const handleClickOutside = (event) => {
   const row = event.target.closest('tr.ant-table-row');
 
   if (!row && !toolbar && !pagination) {
+    console.log('handleClickOutside: Clearing selection'); // Debug log
     clearSelection();
   }
 };
@@ -226,6 +243,7 @@ const rowClassName = (record) => {
 const customRow = (record) => {
   return {
     onMousedown: (event) => {
+      if (event.button === 2) return; // Ignore right-clicks for selection logic
       if (event.target.tagName === 'INPUT') {
         return;
       }
@@ -291,7 +309,24 @@ const customRow = (record) => {
           selectedRowKeys.value = [key];
         }
       }
-    }
+    },
+    onContextmenu: (event) => {
+      event.preventDefault();
+      contextMenu.visible = false; // Hide any previous menu to reset position
+
+      const key = getRowKey(record);
+      // If right-clicking on a non-selected row, select only that row.
+      if (!selectedRowKeys.value.includes(key)) {
+        selectedRowKeys.value = [key];
+        lastSelectedRowKey.value = key;
+      }
+      
+      nextTick(() => {
+        contextMenu.x = event.clientX;
+        contextMenu.y = event.clientY;
+        contextMenu.visible = true;
+      });
+    },
   };
 };
 
@@ -545,10 +580,90 @@ const buildWhereClause = (record) => {
     .join(' AND ')
 }
 
+const contextMenu = reactive({
+  visible: false,
+  x: 0,
+  y: 0,
+});
+
+const escapeSqlValue = (value) => {
+  if (value === null || value === undefined) {
+    return 'NULL';
+  }
+  if (typeof value === 'string') {
+    return `'${value.replace(/'/g, "''")}'`;
+  }
+  return value;
+};
+
+const handleMenuClick = ({ key }) => {
+  contextMenu.visible = false;
+  const selectedRows = tableData.value.filter(r => selectedRowKeys.value.includes(getRowKey(r)));
+  if (selectedRows.length === 0) {
+    message.info('没有选中的行');
+    return;
+  }
+
+  let textToCopy = '';
+
+  try {
+    if (key === 'copy') {
+      textToCopy = selectedRows.map(row =>
+        columns.value.map(c => row[c.key] === null ? 'NULL' : row[c.key]).join('\t')
+      ).join('\n');
+    } else if (key === 'copyAsInsert') {
+      const table = `\`${props.table}\``;
+      const columnNames = columns.value.map(c => `\`${c.key}\``).join(', ');
+      textToCopy = selectedRows.map(row => {
+        const values = columns.value.map(c => escapeSqlValue(row[c.key])).join(', ');
+        return `INSERT INTO ${table} (${columnNames}) VALUES (${values});`;
+      }).join('\n');
+    } else if (key === 'copyAsUpdate') {
+      const table = `\`${props.table}\``;
+      if (!primaryKey.value) {
+        message.error('无法生成 UPDATE 语句：未找到主键。');
+        return;
+      }
+      textToCopy = selectedRows.map(row => {
+        const pkValue = row[primaryKey.value];
+        if (pkValue === null || pkValue === undefined) {
+          return `-- Skipped row without primary key value: ${JSON.stringify(row)}`;
+        }
+        const setClauses = columns.value
+          .filter(c => c.key !== primaryKey.value)
+          .map(c => `\`${c.key}\` = ${escapeSqlValue(row[c.key])}`)
+          .join(', ');
+        const whereClause = `\`${primaryKey.value}\` = ${escapeSqlValue(pkValue)}`;
+        return `UPDATE ${table} SET ${setClauses} WHERE ${whereClause};`;
+      }).join('\n');
+    }
+
+    navigator.clipboard.writeText(textToCopy)
+      .then(() => message.success('已复制到剪贴板'))
+      .catch(err => message.error('复制失败: ' + err));
+
+  } catch (error) {
+    message.error(`生成复制内容时出错: ${error.message}`);
+  }
+};
+
 watch(() => [props.connectionId, props.database, props.table], () => {
   currentPage.value = 1
   loadData()
 })
+
+watch(() => contextMenu.visible, (visible) => {
+  if (visible) {
+    const hide = () => {
+      contextMenu.visible = false;
+      window.removeEventListener('click', hide);
+    };
+    // Add a small delay before attaching the click listener to prevent immediate closing
+    setTimeout(() => {
+      window.addEventListener('click', hide);
+    }, 0);
+  }
+});
 </script>
 
 <style scoped>
