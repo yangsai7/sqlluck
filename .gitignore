@@ -52,3 +52,5 @@ electron/build/
 # 忽略缓存文件
 .cache/
 .parcel-cache/
+
+backend/db.json

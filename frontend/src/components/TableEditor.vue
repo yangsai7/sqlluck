@@ -72,8 +72,9 @@
                 <a-input v-model:value="record.Length" placeholder="长度/值" />
               </template>
               <template v-if="column.key === 'pk'">
-                <a-checkbox v-model:checked="record.isPrimaryKey"></a-checkbox>
+                <a-checkbox :checked="isPrimaryKey(record.Field)" @change="togglePrimaryKey(record.Field)"></a-checkbox>
               </template>
+
               <template v-if="column.key === 'ai'">
                 <a-checkbox v-model:checked="record.isAutoIncrement"></a-checkbox>
               </template>
@@ -124,6 +125,7 @@
                   placeholder="类型"
                   style="width: 100%"
                 >
+                  <a-select-option value="PRIMARY">PRIMARY</a-select-option>
                   <a-select-option value="UNIQUE">UNIQUE</a-select-option>
                   <a-select-option value="INDEX">INDEX</a-select-option>
                   <a-select-option value="FULLTEXT">FULLTEXT</a-select-option>
@@ -286,6 +288,37 @@ const filteredCollations = computed(() =>
   collations.value.filter((c) => c.Charset === tableCharset.value)
 );
 
+const primaryKeyIndex = computed(() => indexesData.value.find(idx => idx.type === 'PRIMARY'));
+
+const isPrimaryKey = (field) => {
+  if (!primaryKeyIndex.value) return false;
+  return primaryKeyIndex.value.columns.includes(field);
+};
+
+const togglePrimaryKey = (field) => {
+  let pkIndex = indexesData.value.find(idx => idx.type === 'PRIMARY');
+  if (!pkIndex) {
+    pkIndex = {
+      id: indexIdCounter++,
+      name: 'PRIMARY',
+      type: 'PRIMARY',
+      columns: [],
+      method: 'BTREE',
+    };
+    indexesData.value.push(pkIndex);
+  }
+
+  const colIndex = pkIndex.columns.indexOf(field);
+  if (colIndex > -1) {
+    pkIndex.columns.splice(colIndex, 1);
+    if (pkIndex.columns.length === 0) {
+      indexesData.value = indexesData.value.filter(idx => idx.type !== 'PRIMARY');
+    }
+  } else {
+    pkIndex.columns.push(field);
+  }
+};
+
 const addColumn = () => {
   structureData.value.push({
     id: idCounter++,
@@ -295,7 +328,6 @@ const addColumn = () => {
     Null: false,
     Default: null,
     Comment: "",
-    isPrimaryKey: false,
     isAutoIncrement: false,
   });
 };
@@ -345,14 +377,12 @@ const loadTableData = async () => {
           type = (typeMatch[1] + (typeMatch[3] || '')).toUpperCase().trim();
           length = typeMatch[2] || "";
         }
-        const isPrimaryKey = col.Key === 'PRI';
         return {
           ...col,
           id: i,
           Type: type,
           Length: length,
           Null: col.Null === 'YES',
-          isPrimaryKey,
           isAutoIncrement: col.Extra.includes('auto_increment'),
         };
       });
@@ -368,7 +398,21 @@ const loadTableData = async () => {
       originalIndexesData.value = [];
       indexIdCounter = 0;
 
-      const indexRegex = /(?:(UNIQUE|FULLTEXT|SPATIAL)?\s*KEY)\s*(?:`?([^`\s(]+)`?)?\s*\(([^)]+)\)/g;
+      const pkMatch = createSql.match(/PRIMARY KEY \(([^)]+)\)/);
+      if (pkMatch) {
+        const cols = pkMatch[1].replace(/`/g, "").split(",").map(s => s.trim());
+        const newIndex = {
+          id: indexIdCounter++,
+          name: 'PRIMARY',
+          type: 'PRIMARY',
+          columns: cols,
+          method: "BTREE",
+        };
+        indexesData.value.push(JSON.parse(JSON.stringify(newIndex)));
+        originalIndexesData.value.push(newIndex);
+      }
+
+      const indexRegex = /(?:(UNIQUE|FULLTEXT|SPATIAL)\s*KEY)\s*(?:`?([^`\s(]+)`?)?\s*\(([^)]+)\)/g;
       let match;
       while ((match = indexRegex.exec(createSql)) !== null) {
         const type = match[1] || "INDEX";
@@ -454,6 +498,16 @@ const previewSql = computed(() => {
     return def;
   };
 
+  const getIndexDef = (idx) => {
+    if (idx.columns.length === 0) return null;
+    const cols = idx.columns.map((c) => "`" + c + "`").join(", ");
+    if (idx.type === 'PRIMARY') {
+      return `PRIMARY KEY (${cols})`;
+    }
+    if (!idx.name) return null;
+    return `${idx.type} KEY \`${idx.name}\` (${cols}) USING ${idx.method}`;
+  }
+
   if (props.mode === "edit") {
     const alterClauses = [];
 
@@ -482,33 +536,44 @@ const previewSql = computed(() => {
       }
     });
 
-    const initialPKFields = originalStructureData.value.filter(c => c.isPrimaryKey).map(c => c.Field);
-    const finalPKFields = structureData.value.filter(c => c.isPrimaryKey).map(c => c.Field);
+    const initialIndexes = originalIndexesData.value;
+    const finalIndexes = indexesData.value;
 
-    if (JSON.stringify(initialPKFields.sort()) !== JSON.stringify(finalPKFields.sort())) {
-      if (initialPKFields.length > 0) {
-        alterClauses.push('DROP PRIMARY KEY');
-      }
-      if (finalPKFields.length > 0) {
-        alterClauses.push(`ADD PRIMARY KEY (${finalPKFields.map(f => `\`${f}\``).join(', ')})`);
-      }
+    const initialPK = initialIndexes.find(i => i.type === 'PRIMARY');
+    const finalPK = finalIndexes.find(i => i.type === 'PRIMARY');
+
+    if (initialPK && !finalPK) {
+      alterClauses.push('DROP PRIMARY KEY');
+    } else if (!initialPK && finalPK) {
+      const cols = finalPK.columns.map(c => `\`${c}\``).join(', ');
+      alterClauses.push(`ADD PRIMARY KEY (${cols})`);
+    } else if (initialPK && finalPK && JSON.stringify(initialPK.columns.sort()) !== JSON.stringify(finalPK.columns.sort())) {
+      alterClauses.push('DROP PRIMARY KEY');
+      const cols = finalPK.columns.map(c => `\`${c}\``).join(', ');
+      alterClauses.push(`ADD PRIMARY KEY (${cols})`);
     }
 
-    const finalIndexes = indexesData.value.filter(i => i.type !== 'PRIMARY');
-    const initialIndexes = originalIndexesData.value.filter(i => i.type !== 'PRIMARY');
-    const initialIndexNames = initialIndexes.map(i => i.name).filter(Boolean);
-    const finalIndexNames = finalIndexes.map(i => i.name).filter(Boolean);
+    const otherInitialIndexes = initialIndexes.filter(i => i.type !== 'PRIMARY');
+    const otherFinalIndexes = finalIndexes.filter(i => i.type !== 'PRIMARY');
 
-    initialIndexes.forEach(initialIdx => {
-      if (initialIdx.name && !finalIndexNames.includes(initialIdx.name)) {
+    otherInitialIndexes.forEach(initialIdx => {
+      const finalIdx = otherFinalIndexes.find(i => i.name === initialIdx.name);
+      if (!finalIdx) {
         alterClauses.push(`DROP INDEX \`${initialIdx.name}\``);
+      } else {
+        if (JSON.stringify(initialIdx.columns.sort()) !== JSON.stringify(finalIdx.columns.sort()) || initialIdx.type !== finalIdx.type) {
+          alterClauses.push(`DROP INDEX \`${initialIdx.name}\``);
+          const cols = finalIdx.columns.map(c => `\`${c}\``).join(', ');
+          alterClauses.push(`ADD ${finalIdx.type} KEY \`${finalIdx.name}\` (${cols})`);
+        }
       }
     });
 
-    finalIndexes.forEach(finalIdx => {
-      if (finalIdx.name && !initialIndexNames.includes(finalIdx.name)) {
+    otherFinalIndexes.forEach(finalIdx => {
+      const initialIdx = otherInitialIndexes.find(i => i.name === finalIdx.name);
+      if (!initialIdx) {
         const cols = finalIdx.columns.map(c => `\`${c}\``).join(', ');
-        alterClauses.push(`ADD ${finalIdx.type} \`${finalIdx.name}\` (${cols})`);
+        alterClauses.push(`ADD ${finalIdx.type} KEY \`${finalIdx.name}\` (${cols})`);
       }
     });
 
@@ -541,27 +606,18 @@ const previewSql = computed(() => {
     })
     .filter(Boolean);
 
-  const primaryKeyCols = structureData.value
-    .filter(col => col.isPrimaryKey)
-    .map(col => `\`${col.Field}\``);
-
   const indexDefs = indexesData.value
-    .map((idx) => {
-      if (!idx.name || idx.columns.length === 0) return null;
-      const cols = idx.columns.map((c) => "`" + c + "`").join(", ");
-      return `  ${idx.type} \`${idx.name}\` (${cols}) USING ${idx.method}`;
+    .map(idx => {
+      const def = getIndexDef(idx);
+      return def ? '  ' + def : null;
     })
     .filter(Boolean);
-    
-  if (primaryKeyCols.length > 0) {
-    indexDefs.unshift(`  PRIMARY KEY (${primaryKeyCols.join(', ')})`);
-  }
 
   let sql = "CREATE TABLE `" + props.database + "`.`" + tableName.value + "` (";
   sql += [...columnDefs, ...indexDefs].join(",\n");
   sql += `\n) ENGINE=${tableEngine.value} DEFAULT CHARSET=${tableCharset.value} COLLATE=${tableCollation.value}`;
   if (tableComment.value) {
-    sql += " COMMENT '" + tableComment.value.replace(/'/g, "''") + "'";
+    sql += " COMMENT='" + tableComment.value.replace(/'/g, "''") + "'";
   }
   sql += ";";
 
