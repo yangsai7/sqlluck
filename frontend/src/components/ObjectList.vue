@@ -364,6 +364,9 @@ const formatBytes = (bytes) => {
 
 const customRow = (record) => {
   return {
+    onContextmenu: (e) => {
+      e.stopPropagation();
+    },
     onDblclick: () => {
       if (
         objectType.value.type === "table" ||
